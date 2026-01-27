@@ -12,67 +12,95 @@ import json
 from datasets.mscoco import build_mscoco_dataset
 from evals.modality_gap import compute_modality_gap_metrics
 from torch.optim import AdamW
+from evals.ma_cir import evaluate_macir
 
 class CustomLossTrainer(Trainer):
-	"""Hugging Face Trainer that uses a user-provided loss function.
+    """Hugging Face Trainer that uses a user-provided loss function.
 
-	The provided `loss_fn` is expected to have signature:
-		loss_fn(outputs, inputs) -> torch.Tensor
+    The provided `loss_fn` is expected to have signature:
+        loss_fn(outputs, inputs) -> torch.Tensor
 
-	Where `outputs = model(**inputs)` and `inputs` is the batch dict from the data collator.
-	"""
+    Where `outputs = model(**inputs)` and `inputs` is the batch dict from the data collator.
+    """
 
-	def __init__(self, *args, loss_fn=None, **kwargs):
-		super().__init__(*args, **kwargs)
-		if loss_fn is None:
-			raise ValueError("loss_fn must be provided for CustomLossTrainer")
-		self.loss_fn = loss_fn
-		self.model_accepts_loss_kwargs = False
+    def __init__(self, *args, loss_fn=None, custom_eval_func=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if loss_fn is None:
+            raise ValueError("loss_fn must be provided for CustomLossTrainer")
+        self.loss_fn = loss_fn
+        self.custom_eval_func = custom_eval_func # Store the custom function
+        self.model_accepts_loss_kwargs = False
 
-	def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
-		outputs = model(**inputs)
-		loss = self.loss_fn(outputs, inputs, num_items_in_batch=num_items_in_batch)
-		return (loss, outputs) if return_outputs else loss
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+        outputs = model(**inputs)
+        loss = self.loss_fn(outputs, inputs, num_items_in_batch=num_items_in_batch)
+        return (loss, outputs) if return_outputs else loss
 
-	def prediction_step(self, model, inputs, prediction_loss_only, ignore_keys=None):
-		"""
-		Custom prediction step that rigidly ensures strict Tensor outputs for Accelerate.
-		"""
-		inputs = self._prepare_inputs(inputs)
-		
-		# FORCE metrics calculation
-		prediction_loss_only = False 
+    def prediction_step(self, model, inputs, prediction_loss_only, ignore_keys=None):
+        """
+        Custom prediction step that rigidly ensures strict Tensor outputs for Accelerate.
+        """
+        inputs = self._prepare_inputs(inputs)
+        
+        # FORCE metrics calculation
+        prediction_loss_only = False 
 
-		with torch.no_grad():
-			with self.compute_loss_context_manager():
-				outputs = model(**inputs)
-				loss = self.loss_fn(outputs, inputs)
-		
-		# Safely extract embeddings
-		vision_embeds = outputs.get('vision_embeds')
-		text_embeds = outputs.get('text_embeds')
-		
-		valid_device = loss.device
-		
-		# SANITIZATION: Ensure everything is a Tensor
-		if vision_embeds is None:
-			vision_embeds = torch.empty(0, device=valid_device)
-		elif not isinstance(vision_embeds, torch.Tensor):
-			# If it's a float/list, value-wrap it
-			vision_embeds = torch.tensor(vision_embeds, device=valid_device)
-			
-		if text_embeds is None:
-			text_embeds = torch.empty(0, device=valid_device)
-		elif not isinstance(text_embeds, torch.Tensor):
-			text_embeds = torch.tensor(text_embeds, device=valid_device)
+        with torch.no_grad():
+            with self.compute_loss_context_manager():
+                outputs = model(**inputs)
+                loss = self.loss_fn(outputs, inputs)
+        
+        # Safely extract embeddings
+        vision_embeds = outputs.get('vision_embeds')
+        text_embeds = outputs.get('text_embeds')
+        
+        valid_device = loss.device
+        
+        # SANITIZATION: Ensure everything is a Tensor
+        if vision_embeds is None:
+            vision_embeds = torch.empty(0, device=valid_device)
+        elif not isinstance(vision_embeds, torch.Tensor):
+            # If it's a float/list, value-wrap it
+            vision_embeds = torch.tensor(vision_embeds, device=valid_device)
+            
+        if text_embeds is None:
+            text_embeds = torch.empty(0, device=valid_device)
+        elif not isinstance(text_embeds, torch.Tensor):
+            text_embeds = torch.tensor(text_embeds, device=valid_device)
 
-		# Create explicit dummy labels
-		# (Trainer will try to pad these, so they must be tensors)
-		batch_len = vision_embeds.shape[0] if vision_embeds.ndim > 0 else 1
-		dummy_labels = torch.zeros(batch_len, device=valid_device)
-		
-		# Return strict (Tensor, Tuple[Tensor, Tensor], Tensor)
-		return (loss, (vision_embeds, text_embeds), dummy_labels)
+        # Create explicit dummy labels
+        # (Trainer will try to pad these, so they must be tensors)
+        batch_len = vision_embeds.shape[0] if vision_embeds.ndim > 0 else 1
+        dummy_labels = torch.zeros(batch_len, device=valid_device)
+        
+        # Return strict (Tensor, Tuple[Tensor, Tensor], Tensor)
+        return (loss, (vision_embeds, text_embeds), dummy_labels)
+
+    def evaluate(self, eval_dataset=None, ignore_keys=None, metric_key_prefix="eval", **kwargs):
+        """
+        Overridden evaluate method to run standard validation AND custom task evaluation.
+        """
+        # 1. Run the standard validation loop (computes loss on eval_dataset)
+        metrics = super().evaluate(eval_dataset, ignore_keys, metric_key_prefix, **kwargs)
+
+        # 2. Run custom evaluation task if provided
+        if self.custom_eval_func:
+            # print(f"\n[Custom Eval] Running custom evaluation task...")
+            
+            # Call the user function. We pass 'self' (the trainer) so it has access 
+            # to self.model, self.accelerator, etc.
+            custom_metrics = self.custom_eval_func(self)
+            
+            # Prefix custom metrics to keep them clean in WandB (e.g., 'retrieval/Recall@1')
+            # You can handle prefixing inside custom_eval_func or here
+            
+            # Merge dicts
+            metrics.update(custom_metrics)
+            
+            # Log the combined metrics explicitly to ensure they appear immediately
+            self.log(metrics)
+
+        return metrics
 
 
 def compute_metrics_fn(eval_pred):
@@ -94,6 +122,31 @@ def compute_metrics_fn(eval_pred):
 
 	metrics = compute_modality_gap_metrics(image_features, text_features)
 	return metrics
+
+def evaluate_on_tasks(trainer: Trainer):
+	"""
+	Evaluate the model on custom tasks and return metrics.
+
+	Args:
+		trainer (Trainer): The Hugging Face Trainer with the model to evaluate.
+	Returns:
+		dict: Dictionary of evaluation metrics.
+	"""
+	model = trainer.model
+	ma_cir_metrics = evaluate_macir(
+		model=model,
+		eval_level="full_splits",
+		split="",
+		batch_size=trainer.args.per_device_eval_batch_size,
+		num_workers=trainer.args.dataloader_num_workers,
+		tqdm=not trainer.args.disable_tqdm,
+	)
+	metrics = {}
+	metrics.update({f"ma-cir/{k}": v for k, v in ma_cir_metrics.items()})
+	return metrics
+
+
+
 
 
 def train(args):
@@ -133,6 +186,7 @@ def train(args):
 
 	model = get("model")
 	loss_fn = get("loss_fn")
+	
 	train_dataset = get("train_dataset")
 	eval_dataset = get("eval_dataset", None)
 	data_collator = get("data_collator", None)
@@ -173,6 +227,7 @@ def train(args):
 		remove_unused_columns =False,
 		dataloader_num_workers=get("num_workers", 4),
 		disable_tqdm=not get("tqdm", False),
+		eval_on_start=True,
 		
 		# CRITICAL: ensure this is False so our prediction_step runs fully
 		prediction_loss_only=False, 
@@ -185,6 +240,7 @@ def train(args):
 		eval_dataset=eval_dataset,
 		data_collator=data_collator,
 		loss_fn=loss_fn,
+		custom_eval_func=evaluate_on_tasks,
 		compute_metrics=compute_metrics_fn,
 		optimizers=(get("optimizer", None), get("lr_scheduler", None))
 	)
@@ -257,6 +313,8 @@ def main(args):
 		model = TwoEncoderVLM(
 			vision_model=vision_model,
 			text_model=text_model,
+			image_processor=image_transform,
+			tokenizer=tokenizer,
 			logit_scale=logit_scale,
 			trainable_temp=trainable_temp,
 			proj_dim=run_config.get("proj_dim", None),

@@ -15,3 +15,4 @@ wandb/
 jobs/
 *.sh
 checkpoints/
+*tmp.*

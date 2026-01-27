@@ -16,6 +16,7 @@ import datasets
 
 from PIL import Image
 from PIL import ImageFile
+
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 Image.MAX_IMAGE_PIXELS = None
 
@@ -31,7 +32,13 @@ class MacirDataset(Dataset):
     """
 
     def __init__(self, dataset_path: Union[Path, str], split,
-                 mode: Literal['query', 'database'], preprocess: callable, eval_type: str,eval_level: str, test_mode=False, no_duplicates: Optional[bool] = False):
+                 mode: Literal['query', 'database'], 
+                 preprocess: callable, 
+                 eval_level: str, 
+                 no_duplicates: Optional[bool] = False, 
+                 caption_transform=None,
+                 max_length_tokenizer: int = 77,
+                 test_mode: bool = False,):
         """
         :param dataset_path: path to the MACIR dataset
         :param split: dataset split, should be in ['add','remove','replace']
@@ -44,9 +51,11 @@ class MacirDataset(Dataset):
         self.mode = mode
         self.split = split
         self.no_duplicates = no_duplicates
-        self.eval_type=eval_type
+        # self.eval_type=eval_type
         self.eval_level=eval_level
-        self.test_mode=False
+        self.test_mode=test_mode
+        self.caption_transform=caption_transform
+        self.max_length_tokenizer=max_length_tokenizer
 
         if mode not in ['query', 'database']:
             raise ValueError("mode should be in ['query', 'database']")
@@ -81,13 +90,23 @@ class MacirDataset(Dataset):
             
                 reference_image = self.preprocess(PIL.Image.open(reference_image_path), return_tensors='pt')['pixel_values'][0]
                 target_image = self.preprocess(PIL.Image.open(target_image_path), return_tensors='pt')['pixel_values'][0]
+
+                if self.caption_transform is not None:
+                    relative_caption = self.caption_transform(
+                        relative_caption,
+                        padding='max_length',
+                        max_length=self.max_length_tokenizer,
+                        truncation=True,
+                        return_tensors='pt')
+                
                 
                 return {
                     'reference_image': reference_image,
                     'reference_name': reference_name,
                     'target_image': target_image,
                     'target_name': target_name,
-                    'relative_caption': relative_caption,
+                    'relative_caption': relative_caption["input_ids"][0],
+                    'attention_mask': relative_caption["attention_mask"][0],
                     'composition_type': composition_type,
                     'condition_type': condition_type,
                 }
@@ -113,3 +132,31 @@ class MacirDataset(Dataset):
             return len(self.image_names)
         else:
             raise ValueError("mode should be in ['query', 'database']")
+        
+
+def build_macir_dataset(split: str,
+                        mode: Literal['query', 'database'], 
+                        preprocess: callable, 
+                        eval_level: str,
+                        no_duplicates: Optional[bool] = False,
+                        caption_transform=None,
+                        max_length_tokenizer: int = 77) -> MacirDataset:
+    """
+    Build MACIR dataset.
+
+    :param split: dataset split, should be in ['add','remove','replace']
+    :param preprocess: function which preprocesses the image
+    :param no_duplicates: if True, the dataset will not yield duplicate images in query mode, does not affect database mode
+    :return: MacirDataset
+    """
+    dataset = MacirDataset(dataset_path="data/macir/MACIR_dataset",
+                           split=split,
+                           mode=mode,
+                           preprocess=preprocess,
+                           eval_level=eval_level,
+                           no_duplicates=no_duplicates,
+                           caption_transform=caption_transform, 
+                           max_length_tokenizer=max_length_tokenizer,
+                           )
+    return dataset
+

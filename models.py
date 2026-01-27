@@ -39,10 +39,12 @@ def build_clip(args):
     return clip_vision_model, clip_preprocess, clip_text_model, tokenizer
 
 class TwoEncoderVLM(torch.nn.Module):
-    def __init__(self, vision_model, text_model, logit_scale, proj_dim=None, trainable_temp=False):
+    def __init__(self, vision_model, text_model, logit_scale, proj_dim=None, trainable_temp=False, image_processor=None, tokenizer=None):
         super().__init__()
         self.vision = vision_model
         self.text = text_model
+        self.image_processor = image_processor
+        self.tokenizer = tokenizer
         self.proj_dim = proj_dim
         self.logit_scale = logit_scale
         self.trainable_temp = trainable_temp
