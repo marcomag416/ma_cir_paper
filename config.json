@@ -1,0 +1,19 @@
+[
+    {
+    "name": "test",
+    "model_name": "CLIP_B32",
+    "loss": "ma_bi_sw",
+    "dataset": "mscoco",
+    "temperature": 100,
+    "lr": 1e-6,
+    "scheduler": "none",
+    "batch_size": 64,
+    "num_epochs": 3,
+    "weight_decay": 0.1,
+    "warmup_ratio": 0.0,
+    "use_lora": true,
+    "lora_alpha": 32,
+    "lora_dropout": 0.01,
+    "lora_rank": 8
+    }
+]

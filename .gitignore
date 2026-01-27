@@ -1,0 +1,17 @@
+data/
+.cache/
+logs/
+outputs/
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pkl
+*.pth
+*.ckpt
+*.pt
+*.log
+wandb/
+jobs/
+*.sh
+checkpoints/
