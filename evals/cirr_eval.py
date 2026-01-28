@@ -11,7 +11,7 @@ from torch.utils.data import Dataset
 from datasets.cirr import build_cirr_dataset
 from utils.decorators import timed_metric
 
-DEBUG = True
+DEBUG = False
 
 def compute_recall(top_k_retrieved, targets_np):
     """
