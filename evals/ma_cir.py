@@ -11,6 +11,9 @@ from torch.utils.data import Dataset
 from datasets.macir import build_macir_dataset
 from models import TwoEncoderVLM
 from tqdm.auto import tqdm
+from contextlib import nullcontext
+
+from utils.decorators import timed_metric
 
 
 def macir_compute_test_metrics(
@@ -266,9 +269,28 @@ def macir_compute_test_metrics(
         return metrics
 
 @torch.no_grad()
-def macir_generate_test_predictions(clip_model: TwoEncoderVLM, query_test_dataset: Dataset, fusion_type: str, batch_size: int = 64, num_workers: int = 4, use_tqdm: bool = False):
-    dataloader = DataLoader(query_test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+def macir_generate_test_predictions(
+    clip_model: TwoEncoderVLM, 
+    query_test_dataset: Dataset, 
+    fusion_type: str, 
+    batch_size: int = 64, 
+    num_workers: int = 4, 
+    use_tqdm: bool = False,
+    accelerator = None
+):
+    pin_mem = (accelerator is None and torch.cuda.is_available())
+    dataloader = DataLoader(query_test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_mem)
     
+    vision_encoder = clip_model.vision
+    text_encoder = clip_model.text
+
+    if accelerator:
+        dataloader = accelerator.prepare(dataloader)
+        vision_encoder, text_encoder = accelerator.prepare(vision_encoder, text_encoder)
+        device_ctx = accelerator.autocast
+    else:
+        device_ctx = nullcontext
+
     all_predicted_features = []
     all_reference_names = []
     all_target_names = []
@@ -276,21 +298,27 @@ def macir_generate_test_predictions(clip_model: TwoEncoderVLM, query_test_datase
     all_condition_types = []
 
     for batch in tqdm(dataloader, disable=not use_tqdm, desc="Generating MACIR test predictions"):
-        reference_images = batch['reference_image'].to(clip_model.vision.device)
-        relative_captions = batch['relative_caption'].to(clip_model.text.device)
-        attention_mask = batch['attention_mask'].to(clip_model.text.device)
+        if accelerator:
+            reference_images = batch['reference_image']
+            relative_captions = batch['relative_caption']
+            attention_mask = batch['attention_mask']
+        else:
+            reference_images = batch['reference_image'].to(vision_encoder.device)
+            relative_captions = batch['relative_caption'].to(text_encoder.device)
+            attention_mask = batch['attention_mask'].to(text_encoder.device)
+
         reference_names = batch['reference_name']
         target_names = batch['target_name']
         composition_types = batch['composition_type']
         condition_types = batch['condition_type']
 
-        image_features = clip_model.vision(reference_images).image_embeds
-        text_features = clip_model.text(input_ids=relative_captions, attention_mask=attention_mask).text_embeds
-
-        if fusion_type == 'sum':
-            predicted_features = image_features + text_features
-        else:
-            raise ValueError(f"Unknown fusion_type: {fusion_type}")
+        with device_ctx():
+            image_features = vision_encoder(reference_images).image_embeds
+            text_features = text_encoder(input_ids=relative_captions, attention_mask=attention_mask).text_embeds
+            if fusion_type == 'sum':
+                predicted_features = image_features + text_features
+            else:
+                raise ValueError(f"Unknown fusion_type: {fusion_type}")
         
         all_predicted_features.append(predicted_features)
         all_reference_names.extend(reference_names)
@@ -300,20 +328,42 @@ def macir_generate_test_predictions(clip_model: TwoEncoderVLM, query_test_datase
 
     all_predicted_features = torch.vstack(all_predicted_features)
 
-    return (all_predicted_features, all_reference_names, all_target_names, all_composition_types, all_condition_types)
-        
+    return (all_predicted_features, all_reference_names, all_target_names, all_composition_types, all_condition_types)    
+
 @torch.no_grad()
-def macir_generate_index_features(clip_model: TwoEncoderVLM, index_dataset: Dataset, batch_size: int = 64, num_workers: int = 4, use_tqdm: bool = False):
-    dataloader = DataLoader(index_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+def macir_generate_index_features(
+    clip_model: TwoEncoderVLM, 
+    index_dataset: Dataset, 
+    batch_size: int = 64, 
+    num_workers: int = 4, 
+    use_tqdm: bool = False,
+    accelerator = None
+):
+    pin_mem = (accelerator is None and torch.cuda.is_available())
+    dataloader = DataLoader(index_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_mem)
+    
+    vision_encoder = clip_model.vision
+
+    if accelerator:
+        dataloader = accelerator.prepare(dataloader)
+        vision_encoder = accelerator.prepare(vision_encoder)
+        device_ctx = accelerator.autocast
+    else:
+        device_ctx = nullcontext
     
     all_index_features = []
     all_index_names = []
 
     for batch in tqdm(dataloader, disable=not use_tqdm, desc="Generating MACIR index features"):
-        images = batch['image'].to(clip_model.vision.device)
+        if accelerator:
+            images = batch['image']
+        else:
+            images = batch['image'].to(vision_encoder.device)
+            
         image_names = batch['image_name']
 
-        image_features = clip_model.vision(images).image_embeds
+        with device_ctx():
+            image_features = vision_encoder(images).image_embeds
 
         all_index_features.append(image_features)
         all_index_names.extend(image_names)
@@ -322,21 +372,39 @@ def macir_generate_index_features(clip_model: TwoEncoderVLM, index_dataset: Data
 
     return all_index_features, all_index_names  
     
-def evaluate_macir(model: TwoEncoderVLM, eval_level: str, split: str, batch_size: int = 64, num_workers: int = 4, tqdm: bool = False):
+def is_accelerator(obj):
+    """Helper to check if object is a valid Accelerator instance without strict type checking"""
+    return hasattr(obj, 'prepare') and hasattr(obj, 'device') and hasattr(obj, 'unwrap_model')
+
+@timed_metric
+def evaluate_macir(
+    model: TwoEncoderVLM, 
+    eval_level: str, 
+    split: str, 
+    fusion_type: str = "sum", 
+    batch_size: int = 64, 
+    num_workers: int = 4, 
+    tqdm: bool = False,
+    accelerator = None
+):
+    # SAFETY CHECK
+    if accelerator is not None and not is_accelerator(accelerator):
+        accelerator = None
+
     macir_db = build_macir_dataset(
-		split=split,
-		mode="database",
-		preprocess=model.image_processor,
-		eval_level=eval_level,
-		caption_transform=model.tokenizer,
+        split=split,
+        mode="database",
+        preprocess=model.image_processor,
+        eval_level=eval_level,
+        caption_transform=model.tokenizer,
         max_length_tokenizer=77,
-	)
+    )
     ma_cir_query = build_macir_dataset(
-		split=split,
-		mode="query",
-		preprocess=model.image_processor,
-		eval_level=eval_level,
-		caption_transform=model.tokenizer,
+        split=split,
+        mode="query",
+        preprocess=model.image_processor,
+        eval_level=eval_level,
+        caption_transform=model.tokenizer,
         max_length_tokenizer=77,
     )
     index_features, index_names = macir_generate_index_features(
@@ -345,15 +413,17 @@ def evaluate_macir(model: TwoEncoderVLM, eval_level: str, split: str, batch_size
         batch_size=batch_size,
         num_workers=num_workers,
         use_tqdm=tqdm,
+        accelerator=accelerator
     )
 
     predicted_features, reference_names, target_names, composition_types, condition_types = macir_generate_test_predictions(
         clip_model=model,
         query_test_dataset=ma_cir_query,
-        fusion_type="sum",
+        fusion_type=fusion_type,
         batch_size=batch_size,
         num_workers=num_workers,
         use_tqdm=tqdm,
+        accelerator=accelerator
     )
     metrics = macir_compute_test_metrics(
         predicted_features=predicted_features,

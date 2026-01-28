@@ -1,4 +1,5 @@
 import os
+import time
 from types import SimpleNamespace
 from peft import LoraConfig, LoraModel
 import torch
@@ -13,6 +14,7 @@ from datasets.mscoco import build_mscoco_dataset
 from evals.modality_gap import compute_modality_gap_metrics
 from torch.optim import AdamW
 from evals.ma_cir import evaluate_macir
+from utils.dict import prepend_key_to_dict
 
 class CustomLossTrainer(Trainer):
     """Hugging Face Trainer that uses a user-provided loss function.
@@ -41,9 +43,6 @@ class CustomLossTrainer(Trainer):
         Custom prediction step that rigidly ensures strict Tensor outputs for Accelerate.
         """
         inputs = self._prepare_inputs(inputs)
-        
-        # FORCE metrics calculation
-        prediction_loss_only = False 
 
         with torch.no_grad():
             with self.compute_loss_context_manager():
@@ -80,25 +79,19 @@ class CustomLossTrainer(Trainer):
         """
         Overridden evaluate method to run standard validation AND custom task evaluation.
         """
-        # 1. Run the standard validation loop (computes loss on eval_dataset)
-        metrics = super().evaluate(eval_dataset, ignore_keys, metric_key_prefix, **kwargs)
 
-        # 2. Run custom evaluation task if provided
+        custom_metrics = {}
         if self.custom_eval_func:
-            # print(f"\n[Custom Eval] Running custom evaluation task...")
-            
-            # Call the user function. We pass 'self' (the trainer) so it has access 
-            # to self.model, self.accelerator, etc.
             custom_metrics = self.custom_eval_func(self)
             
-            # Prefix custom metrics to keep them clean in WandB (e.g., 'retrieval/Recall@1')
-            # You can handle prefixing inside custom_eval_func or here
-            
-            # Merge dicts
+            wandb.log(custom_metrics, step=self.state.global_step, commit=False)
+			
+
+
+        metrics = super().evaluate(eval_dataset, ignore_keys, metric_key_prefix, **kwargs)
+
+        if custom_metrics:
             metrics.update(custom_metrics)
-            
-            # Log the combined metrics explicitly to ensure they appear immediately
-            self.log(metrics)
 
         return metrics
 
@@ -132,6 +125,7 @@ def evaluate_on_tasks(trainer: Trainer):
 	Returns:
 		dict: Dictionary of evaluation metrics.
 	"""
+	metrics = {}
 	model = trainer.model
 	ma_cir_metrics = evaluate_macir(
 		model=model,
@@ -140,14 +134,11 @@ def evaluate_on_tasks(trainer: Trainer):
 		batch_size=trainer.args.per_device_eval_batch_size,
 		num_workers=trainer.args.dataloader_num_workers,
 		tqdm=not trainer.args.disable_tqdm,
+		fusion_type="sum",
+		accelerator=trainer.accelerator
 	)
-	metrics = {}
-	metrics.update({f"ma-cir/{k}": v for k, v in ma_cir_metrics.items()})
+	metrics.update(prepend_key_to_dict("macir/", ma_cir_metrics))
 	return metrics
-
-
-
-
 
 def train(args):
 	"""
@@ -166,8 +157,10 @@ def train(args):
 	  - weight_decay (float)
 	  - warmup_ratio (float)
 	  - logging_steps (int)
+	  - save_strategy (str)
 	  - save_steps (int)
 	  - save_total_limit (int)
+	  - logging_steps (int)
 	  - seed (int)
 	  - fp16 (bool)
 	  - gradient_accumulation_steps (int)
@@ -176,6 +169,7 @@ def train(args):
 	  - wandb_run_name (str, optional)
 	  - report_to (str, optional): defaults to 'wandb'
 	  - num_workers (int, optional): number of data loading workers
+	  - tqdm (bool, optional): enable tqdm progress bars
 
 	Returns: `Trainer` after training completes.
 	"""
@@ -222,7 +216,7 @@ def train(args):
 		save_total_limit=get("save_total_limit", 10),
 		seed=get("seed", 42),
 		fp16=get("fp16", False),
-		report_to=get("report_to", "wandb"),
+		report_to="wandb",
 		run_name=wandb_run_name,
 		remove_unused_columns =False,
 		dataloader_num_workers=get("num_workers", 4),
@@ -257,8 +251,6 @@ def train(args):
 
 	wandb.finish()
 	return trainer
-
-
 
 
 def main(args):
