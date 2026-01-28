@@ -5,6 +5,7 @@ from peft import LoraConfig, LoraModel
 import torch
 import wandb
 from transformers import Trainer, TrainingArguments
+from evals.cirr_eval import evaluate_cirr
 from losses import build_loss_fn
 from models import build_clip, TwoEncoderVLM
 import argparse
@@ -13,7 +14,7 @@ import json
 from datasets.mscoco import build_mscoco_dataset
 from evals.modality_gap import compute_modality_gap_metrics
 from torch.optim import AdamW
-from evals.ma_cir import evaluate_macir
+from evals.ma_cir_eval import evaluate_macir
 from utils.dict import prepend_key_to_dict
 
 class CustomLossTrainer(Trainer):
@@ -127,6 +128,16 @@ def evaluate_on_tasks(trainer: Trainer):
 	"""
 	metrics = {}
 	model = trainer.model
+
+	cirr_metrics = evaluate_cirr(
+		model=model,
+		batch_size=trainer.args.per_device_eval_batch_size,
+		num_workers=trainer.args.dataloader_num_workers,
+		use_tqdm=not trainer.args.disable_tqdm,
+		accelerator=trainer.accelerator
+	)
+	metrics.update(prepend_key_to_dict("cirr/", cirr_metrics))
+
 	ma_cir_metrics = evaluate_macir(
 		model=model,
 		eval_level="full_splits",
@@ -138,6 +149,7 @@ def evaluate_on_tasks(trainer: Trainer):
 		accelerator=trainer.accelerator
 	)
 	metrics.update(prepend_key_to_dict("macir/", ma_cir_metrics))
+	
 	return metrics
 
 def train(args):

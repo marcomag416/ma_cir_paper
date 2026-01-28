@@ -14,6 +14,7 @@ from tqdm.auto import tqdm
 from contextlib import nullcontext
 
 from utils.decorators import timed_metric
+from utils.transformers import is_accelerator
 
 
 def macir_compute_test_metrics(
@@ -372,9 +373,7 @@ def macir_generate_index_features(
 
     return all_index_features, all_index_names  
     
-def is_accelerator(obj):
-    """Helper to check if object is a valid Accelerator instance without strict type checking"""
-    return hasattr(obj, 'prepare') and hasattr(obj, 'device') and hasattr(obj, 'unwrap_model')
+
 
 @timed_metric
 def evaluate_macir(
