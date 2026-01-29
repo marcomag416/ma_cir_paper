@@ -47,6 +47,9 @@ def compute_statistic_metrics(image_features, text_features):
     Returns:
         dict: Dictionary containing variances of image and text features.
     """
+
+    image_features = image_features / image_features.norm(dim=1, keepdim=True)
+    text_features = text_features / text_features.norm(dim=1, keepdim=True)
     
     image_var = image_features.var(dim=0, unbiased=False).sum().item()
     text_var = text_features.var(dim=0, unbiased=False).sum().item()
