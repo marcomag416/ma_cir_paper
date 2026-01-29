@@ -230,7 +230,7 @@ def train(args):
 
 
 	# Initialize Weights & Biases before Trainer to capture configs
-	wandb_project = get("wandb_project", "vlm-post-train")
+	wandb_project = get("wandb_project", "ma_loss_paper")
 	wandb_run_name = get("name", "run")
 	wandb.init(project=wandb_project, name=wandb_run_name)
 
