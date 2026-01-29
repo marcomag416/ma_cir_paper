@@ -36,3 +36,25 @@ def compute_modality_gap_metrics(image_features, text_features):
     }
 
     return metrics
+
+def compute_statistic_metrics(image_features, text_features):
+    """
+    Compute basic statistics for image and text features.
+
+    Args:
+        image_features (torch.Tensor): Image features of shape (N, D).
+        text_features (torch.Tensor): Text features of shape (N, D).
+    Returns:
+        dict: Dictionary containing variances of image and text features.
+    """
+    
+    image_var = image_features.var(dim=0, unbiased=False).sum().item()
+    text_var = text_features.var(dim=0, unbiased=False).sum().item()
+
+    metrics = {
+        "image_variance": image_var,
+        "text_variance": text_var,
+    }
+
+    return metrics
+    

@@ -15,7 +15,7 @@ import argparse
 import os
 import json
 from datasets.mscoco import build_mscoco_dataset
-from evals.modality_gap import compute_modality_gap_metrics
+from evals.metrics import compute_modality_gap_metrics, compute_statistic_metrics
 from torch.optim import AdamW
 from utils.dict import prepend_key_to_dict
 
@@ -117,7 +117,11 @@ def compute_metrics_fn(eval_pred):
 	if not isinstance(text_features, torch.Tensor):
 		text_features = torch.tensor(text_features)
 
-	metrics = compute_modality_gap_metrics(image_features, text_features)
+	mg_metrics = compute_modality_gap_metrics(image_features, text_features)
+	stat_metrics = compute_statistic_metrics(image_features, text_features)
+	metrics = {}
+	metrics.update(mg_metrics)
+	metrics.update(stat_metrics)
 	return metrics
 
 def evaluate_on_tasks(trainer: Trainer):
