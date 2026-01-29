@@ -248,7 +248,7 @@ def evaluate_cirr(
     fusion_type: str = 'sum',
     batch_size: int = 64,
     num_workers: int = 4,
-    use_tqdm : bool = False,
+    tqdm : bool = False,
     accelerator=None,
     skip_subset_metrics: bool = False
 ):
@@ -273,7 +273,7 @@ def evaluate_cirr(
         index_dataset=cirr_index,
         batch_size=batch_size,
         num_workers=num_workers,
-        use_tqdm=use_tqdm,
+        use_tqdm=tqdm,
         accelerator=accelerator
     )
 
@@ -283,7 +283,7 @@ def evaluate_cirr(
         fusion_type=fusion_type,
         batch_size=batch_size,
         num_workers=num_workers,
-        use_tqdm=use_tqdm,
+        use_tqdm=tqdm,
         accelerator=accelerator
     )
 
@@ -309,7 +309,7 @@ def generate_cirr_test_submission(
     fusion_type: str = 'sum',
     batch_size: int = 64,
     num_workers: int = 4,
-    use_tqdm : bool = False,
+    tqdm : bool = False,
     accelerator=None,
 ):
     """
@@ -337,7 +337,7 @@ def generate_cirr_test_submission(
         index_dataset=cirr_index,
         batch_size=batch_size,
         num_workers=num_workers,
-        use_tqdm=use_tqdm,
+        use_tqdm=tqdm,
         accelerator=accelerator
     )
 
@@ -347,7 +347,7 @@ def generate_cirr_test_submission(
         fusion_type=fusion_type,
         batch_size=batch_size,
         num_workers=num_workers,
-        use_tqdm=use_tqdm,
+        use_tqdm=tqdm,
         accelerator=accelerator,
         skip_targets=True
     )
