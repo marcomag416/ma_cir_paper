@@ -159,6 +159,7 @@ def generate_cirr_index_features(
     all_image_features = []
     all_image_names = []
 
+    clip_model.eval()
     vision_encoder = clip_model.vision
 
     for batch in tqdm(dataloader, disable=not use_tqdm, desc="Generating CIRR index features"):
@@ -197,7 +198,7 @@ def generate_cirr_predictions(
     all_group_members = []
     all_pair_ids = []
 
-
+    clip_model.eval()
     text_encoder = clip_model.text
     vision_encoder = clip_model.vision
 

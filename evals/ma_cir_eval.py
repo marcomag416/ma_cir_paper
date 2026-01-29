@@ -282,6 +282,7 @@ def macir_generate_test_predictions(
     pin_mem = (accelerator is None and torch.cuda.is_available())
     dataloader = DataLoader(query_test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_mem)
     
+    clip_model.eval()
     vision_encoder = clip_model.vision
     text_encoder = clip_model.text
 
@@ -343,6 +344,7 @@ def macir_generate_index_features(
     pin_mem = (accelerator is None and torch.cuda.is_available())
     dataloader = DataLoader(index_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_mem)
     
+    clip_model.eval()
     vision_encoder = clip_model.vision
 
     if accelerator:
