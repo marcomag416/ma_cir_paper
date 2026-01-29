@@ -8,6 +8,7 @@ from transformers import Trainer, TrainingArguments
 from evals.circo_eval import evaluate_circo
 from evals.cirr_eval import evaluate_cirr
 from evals.ma_cir_eval import evaluate_macir
+from evals.simat_eval import evaluate_simat
 from losses import build_loss_fn
 from models import build_clip, TwoEncoderVLM
 import argparse
@@ -87,6 +88,7 @@ class CustomLossTrainer(Trainer):
             custom_metrics = self.custom_eval_func(self)
             
             wandb.log(custom_metrics, step=self.state.global_step, commit=False)
+            print(custom_metrics)
 			
 
 
@@ -130,22 +132,33 @@ def evaluate_on_tasks(trainer: Trainer):
 	metrics = {}
 	model = trainer.model
 
-	circo_metrics = evaluate_circo(
+	simat_metrics = evaluate_simat(
 		model=model,
-		fusion_type="sum",
 		batch_size=trainer.args.per_device_eval_batch_size,
 		num_workers=trainer.args.dataloader_num_workers,
 		tqdm=not trainer.args.disable_tqdm,
 		accelerator=trainer.accelerator
 	)
-	metrics.update(prepend_key_to_dict("circo/", circo_metrics))
+	metrics.update(prepend_key_to_dict("simat/", simat_metrics))
+
+	if not trainer.is_in_train:
+		# Only compute these if not in training mode (to save time)
+		circo_metrics = evaluate_circo(
+			model=model,
+			fusion_type="sum",
+			batch_size=trainer.args.per_device_eval_batch_size,
+			num_workers=trainer.args.dataloader_num_workers,
+			tqdm=not trainer.args.disable_tqdm,
+			accelerator=trainer.accelerator
+		)
+		metrics.update(prepend_key_to_dict("circo/", circo_metrics))
 
 	cirr_metrics = evaluate_cirr(
 		model=model,
 		fusion_type="sum",
 		batch_size=trainer.args.per_device_eval_batch_size,
 		num_workers=trainer.args.dataloader_num_workers,
-		use_tqdm=not trainer.args.disable_tqdm,
+		tqdm=not trainer.args.disable_tqdm,
 		accelerator=trainer.accelerator
 	)
 	metrics.update(prepend_key_to_dict("cirr/", cirr_metrics))
