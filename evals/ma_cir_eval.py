@@ -3,7 +3,7 @@
 
 import torch.nn.functional as F
 import numpy as np
-from typing import List, Dict
+from typing import List, Dict, Literal
 import torch
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
@@ -380,14 +380,14 @@ def macir_generate_index_features(
 @timed_metric
 def evaluate_macir(
     model: TwoEncoderVLM, 
-    eval_level: str, 
+    eval_level: Literal["full", "full_splits", "restricted"],
     split: str, 
     fusion_type: str = "sum", 
     batch_size: int = 64, 
     num_workers: int = 4, 
     tqdm: bool = False,
     accelerator = None
-):
+) -> Dict[str, float]:
     # SAFETY CHECK
     if accelerator is not None and not is_accelerator(accelerator):
         accelerator = None

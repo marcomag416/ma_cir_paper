@@ -165,7 +165,7 @@ def evaluate_on_tasks(trainer: Trainer):
 
 	ma_cir_metrics = evaluate_macir(
 		model=model,
-		eval_level="full_splits",
+		eval_level="full",
 		split="",
 		batch_size=trainer.args.per_device_eval_batch_size,
 		num_workers=trainer.args.dataloader_num_workers,
