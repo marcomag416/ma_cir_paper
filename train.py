@@ -277,7 +277,7 @@ def train(args):
 		remove_unused_columns =False,
 		dataloader_num_workers=get("num_workers", 4),
 		disable_tqdm=not get("tqdm", False),
-		eval_on_start=False,
+		eval_on_start=True,
 		
 		# CRITICAL: ensure this is False so our prediction_step runs fully
 		prediction_loss_only=False, 
