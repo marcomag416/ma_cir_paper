@@ -1,7 +1,5 @@
 import os
-import time
-from types import SimpleNamespace
-from peft import LoraConfig, PeftModel
+from peft import LoraConfig
 import torch
 import wandb
 from transformers import Trainer, TrainingArguments
@@ -9,13 +7,12 @@ from evals.circo_eval import evaluate_circo
 from evals.cirr_eval import evaluate_cirr
 from evals.ma_cir_eval import evaluate_macir
 from evals.simat_eval import evaluate_simat
+from evals.metrics import compute_modality_gap_metrics, compute_statistic_metrics
 from losses import build_loss_fn
-from models import build_clip, TwoEncoderVLM
+from models import AutoModel, AutoTwoEncoderVLMConfig
 import argparse
-import os
 import json
 from datasets.mscoco import build_mscoco_dataset
-from evals.metrics import compute_modality_gap_metrics, compute_statistic_metrics
 from torch.optim import AdamW
 from utils.dict import prepend_key_to_dict
 
@@ -35,11 +32,29 @@ class CustomLossTrainer(Trainer):
         self.loss_fn = loss_fn
         self.custom_eval_func = custom_eval_func # Store the custom function
         self.model_accepts_loss_kwargs = False
+        
+        self.stored_metrics = {}
 
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         outputs = model(**inputs)
+        
+        # Capture logit_scale if present in outputs
+        if isinstance(outputs, dict) and "logit_scale" in outputs:
+            val = outputs["logit_scale"]
+            # Store as python float (handle tensor or scalar)
+            self.stored_metrics["logit_scale"] = val.item() if hasattr(val, "item") else val
+
         loss = self.loss_fn(outputs, inputs, num_items_in_batch=num_items_in_batch)
         return (loss, outputs) if return_outputs else loss
+
+    def log(self, logs: dict[str, float], *args, **kwargs) -> None:
+        """
+        Override log to inject the captured metrics into the logs dictionary 
+        before sending to WandB.
+        """
+        if hasattr(self, "stored_metrics") and self.stored_metrics:
+            logs.update(self.stored_metrics)
+        super().log(logs, *args, **kwargs)
 
     def prediction_step(self, model, inputs, prediction_loss_only, ignore_keys=None):
         """
@@ -262,7 +277,7 @@ def train(args):
 		remove_unused_columns =False,
 		dataloader_num_workers=get("num_workers", 4),
 		disable_tqdm=not get("tqdm", False),
-		eval_on_start=True,
+		eval_on_start=False,
 		
 		# CRITICAL: ensure this is False so our prediction_step runs fully
 		prediction_loss_only=False, 
@@ -279,6 +294,8 @@ def train(args):
 		compute_metrics=compute_metrics_fn,
 		optimizers=(get("optimizer", None), get("lr_scheduler", None))
 	)
+
+	model.config.save_pretrained(output_dir)
 	
 	trainer.train()
 
@@ -319,46 +336,32 @@ def main(args):
 	run_config["save_steps"] = args.save_steps
 
 	model_name = run_config.get("model_name")
-	
-	if model_name.startswith("CLIP_"):
-		clip_model_name = model_name.split("CLIP_")[1]
-		vision_model, image_transform, text_model, tokenizer = build_clip(SimpleNamespace(
-			clip_model_name=clip_model_name,
-			cache_dir=run_config.get("cache_dir", ".cache"),
-			mixed_precision= "fp16" if run_config.get("mixed_precision", False) else None,
-		))
-		
-		if run_config.get("temperature") == "learnable":
-			trainable_temp = True
-			logit_scale = 100
-		else:
-			trainable_temp = False
-			logit_scale = run_config.get("logit_scale", 100)
+	trainable_temp = run_config.get("learnable_temperature", False)
+	logit_scale = run_config.get("logit_scale", 100)
 
-		model = TwoEncoderVLM(
-			vision_model=vision_model,
-			text_model=text_model,
-			image_processor=image_transform,
-			tokenizer=tokenizer,
-			logit_scale=logit_scale,
-			trainable_temp=trainable_temp,
-			proj_dim=run_config.get("proj_dim", None),
+	model_config = AutoTwoEncoderVLMConfig(
+		model_name=model_name,
+		mixed_precision= "fp16" if run_config.get("mixed_precision", False) else "fp32",
+		cache_dir=run_config.get("cache_dir", ".cache"),
+		logit_scale=logit_scale,
+		trainable_temp=trainable_temp,
+	)
+
+	model = AutoModel.from_config(model_config)
+
+	if run_config.get("use_lora", False):
+		#raise a warning if one of the loara parameters is missing
+		if "lora_rank" not in run_config or "lora_alpha" not in run_config or "lora_dropout" not in run_config:
+			Warning("[WARN] One of the LoRA parameters (lora_rank, lora_alpha, lora_dropout) is missing. Using default values.")
+
+		lora_config = LoraConfig(
+			r=run_config.get("lora_rank", 16),
+			lora_alpha=run_config.get("lora_alpha", 16),
+			lora_dropout=run_config.get("lora_dropout", 0.1),
+			target_modules=["q_proj", "k_proj", "v_proj", "out_proj", "fc1", "fc2", "text_projection", "visual_projection", "position_embedding", "token_embedding", "patch_embedding"],
 		)
 
-		if run_config.get("use_lora", False):
-			#raise a warning if one of the loara parameters is missing
-			if "lora_rank" not in run_config or "lora_alpha" not in run_config or "lora_dropout" not in run_config:
-				Warning("[WARN] One of the LoRA parameters (lora_rank, lora_alpha, lora_dropout) is missing. Using default values.")
-
-			config = LoraConfig(
-				task_type="FEATURE_EXTRACTION",
-				r=run_config.get("lora_rank", 16),
-				lora_alpha=run_config.get("lora_alpha", 16),
-				lora_dropout=run_config.get("lora_dropout", 0.1),
-				target_modules=["q_proj", "k_proj", "v_proj", "out_proj", "fc1", "fc2", "text_projection", "visual_projection", "position_embedding", "token_embedding", "patch_embedding"],
-			)
-
-			model = PeftModel(model, config, "lora_adapter")
+		model = model.create_peft_model(lora_config, adapter_name="lora_adapter")
 
 	loss_name = run_config.get("loss", "clip")
 	loss_fn = build_loss_fn(loss_name, **run_config.get("loss_params", {}))
@@ -367,13 +370,13 @@ def main(args):
 	if dataset_name == "mscoco":
 		train_dataset = build_mscoco_dataset(
 			split="train",
-			image_transform=image_transform,
-			caption_transform=tokenizer,
+			image_transform=model.image_processor,
+			caption_transform=model.tokenizer,
 		)
 		eval_dataset = build_mscoco_dataset(
 			split="val",
-			image_transform=image_transform,
-			caption_transform=tokenizer,
+			image_transform=model.image_processor,
+			caption_transform=model.tokenizer,
 		)
 	else:
 		raise ValueError(f"Unsupported dataset: {dataset_name}")
@@ -409,13 +412,13 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--run", type=str, required=True, help="Name of the run configuration to execute.", dest="run")
-    parser.add_argument("--config", type=str, default="config.json", help="Path to the configuration file.", dest="config")
+    parser.add_argument("--config", type=str, default="run_config.json", help="Path to the configuration file.", dest="config")
     parser.add_argument("--output_dir", type=str, default="outputs/run", help="Directory to save outputs.", dest="output_dir")
     parser.add_argument("--cache_dir", type=str, default=".cache", help="Directory to cache models and datasets.", dest="cache_dir")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode.", dest="debug")
     parser.add_argument("--num_workers", type=int, default=4, help="Number of workers for data loading.", dest="num_workers")
     parser.add_argument("--tqdm", action="store_true", help="Enable tqdm progress bars.", dest="tqdm")
-    parser.add_argument("--save_strategy", type=str, default="epoch", help="Save strategy for checkpoints.", dest="save_strategy")
+    parser.add_argument("--save_strategy", type=str, default="epoch", help="Save strategy for checkpoints [epoch, steps].", dest="save_strategy")
     parser.add_argument("--save_steps", type=int, default=500, help="Number of steps between saving checkpoints.", dest="save_steps")
     args = parser.parse_args()
     main(args)
