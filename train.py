@@ -1,7 +1,7 @@
 import os
 import time
 from types import SimpleNamespace
-from peft import LoraConfig, LoraModel
+from peft import LoraConfig, PeftModel
 import torch
 import wandb
 from transformers import Trainer, TrainingArguments
@@ -282,14 +282,6 @@ def train(args):
 	
 	trainer.train()
 
-	# Save final artifacts
-	trainer.save_model(output_dir)
-	if hasattr(model, "processor") and model.processor is not None:
-		try:
-			model.processor.save_pretrained(output_dir)
-		except Exception:
-			pass
-
 	wandb.finish()
 	return trainer
 
@@ -354,15 +346,19 @@ def main(args):
 		)
 
 		if run_config.get("use_lora", False):
+			#raise a warning if one of the loara parameters is missing
+			if "lora_rank" not in run_config or "lora_alpha" not in run_config or "lora_dropout" not in run_config:
+				Warning("[WARN] One of the LoRA parameters (lora_rank, lora_alpha, lora_dropout) is missing. Using default values.")
+
 			config = LoraConfig(
 				task_type="FEATURE_EXTRACTION",
-				r=run_config.get("lora_r", 8),
-				lora_alpha=run_config.get("lora_alpha", 32),
-				lora_dropout=run_config.get("lora_dropout", 0.01),
+				r=run_config.get("lora_rank", 16),
+				lora_alpha=run_config.get("lora_alpha", 16),
+				lora_dropout=run_config.get("lora_dropout", 0.1),
 				target_modules=["q_proj", "k_proj", "v_proj", "out_proj", "fc1", "fc2", "text_projection", "visual_projection", "position_embedding", "token_embedding", "patch_embedding"],
 			)
 
-			model = LoraModel(model, config, "lora_adapter")
+			model = PeftModel(model, config, "lora_adapter")
 
 	loss_name = run_config.get("loss", "clip")
 	loss_fn = build_loss_fn(loss_name, **run_config.get("loss_params", {}))
