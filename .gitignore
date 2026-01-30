@@ -16,3 +16,4 @@ jobs/
 *.sh
 checkpoints/
 *tmp.*
+tmp/
