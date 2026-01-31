@@ -17,3 +17,4 @@ jobs/
 checkpoints/
 *tmp.*
 tmp/
+results/

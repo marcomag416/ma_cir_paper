@@ -1,3 +1,4 @@
+from typing import Literal
 import torch.nn as nn
 from torchvision import datasets
 import torch
@@ -155,16 +156,17 @@ def evaluate_simat(
     num_workers : int = 4,
     tqdm: bool = False,
     accelerator = None,
+    split: Literal['test', 'val'] = 'val',
 ):
     simat_words_dataset = build_simat_dataset(
-        split='test',
+        split=split,
         mode='words',
         tokenizer=model.tokenizer,
         max_length_tokenizer=77,
     )
 
     simat_images_dataset = build_simat_dataset(
-        split='test',
+        split=split,
         mode='images',
         image_transform=model.image_processor,
     )
@@ -201,7 +203,7 @@ def evaluate_simat(
 
 
 DEFAULT_OUTPUT_DIR = os.path.join('results', 'simat', 'sim_distribution')
-def plot_simat_sim_distribution(image_embeddings, words_embeddings, domain='test', lbd=1.0, output_dir=DEFAULT_OUTPUT_DIR):
+def plot_simat_sim_distribution(image_embeddings, words_embeddings, domain: Literal['test', 'val'] = 'test', lbd=1.0, output_dir=DEFAULT_OUTPUT_DIR):
     transfos = pd.read_csv('data/annotations/simat/transfos.csv', index_col=0)
     triplets = pd.read_csv('data/annotations/simat/triplets.csv', index_col=0)
     did2rid = dict(zip(triplets.dataset_id, triplets.index))

@@ -67,7 +67,7 @@ def build_loss_fn(loss_name, **kwargs):
     def loss_fn(outputs, labels, **kwargs):
         text_embeds = outputs["text_embeds"]
         vision_embeds = outputs["vision_embeds"]
-        logit_scale = outputs["logit_scale"]
+        logit_scale = outputs["logit_scale"].to(text_embeds.device)
 
 
         with torch.autocast(text_embeds.device.type):

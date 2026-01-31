@@ -2,10 +2,11 @@
 import numpy as np
 import torch
 
+from evals import metrics
 from models import TwoEncoderVLM
 from tqdm.auto import tqdm
 from torch.utils.data import DataLoader
-from typing import Optional
+from typing import Optional, Tuple
 from torch.utils.data import Dataset
 
 from datasets.cirr import build_cirr_dataset
@@ -27,7 +28,7 @@ def compute_names(top_k_retrieved, pair_ids):
     """
     names_dict = {}
     for i, pair_id in enumerate(pair_ids):
-        names_dict[pair_id] = top_k_retrieved[i].tolist()
+        names_dict[pair_id.item()] = top_k_retrieved[i].tolist()
     return names_dict
 
 def compute_cirr_metrics(
@@ -94,7 +95,7 @@ def compute_cirr_metrics(
     for k in k_values:
         top_k_retrieved = sorted_index_names[:, :k]
         if return_type == 'names':
-            output[f"top_{k}_retrieved_names"] = compute_names(top_k_retrieved, pair_ids)
+            output[f"top_{k}"] = compute_names(top_k_retrieved, pair_ids)
         elif return_type == 'metrics':
             output[f"recall_at{k}"] = compute_recall(top_k_retrieved, targets_np)
 
@@ -133,7 +134,7 @@ def compute_cirr_metrics(
         for k in k_values_subset:
             top_k_retrieved = sorted_index_names_subset[:, :k]
             if return_type == 'names':
-                output[f"subset_top_{k}_retrieved_names"] = compute_names(top_k_retrieved, pair_ids)
+                output[f"subset_top_{k}"] = compute_names(top_k_retrieved, pair_ids)
             elif return_type == 'metrics':
                 output[f"subset_recall_at{k}"] = compute_recall(top_k_retrieved, targets_np)
 
@@ -250,15 +251,18 @@ def evaluate_cirr(
     num_workers: int = 4,
     tqdm : bool = False,
     accelerator=None,
-    skip_subset_metrics: bool = False
+    skip_subset_metrics: bool = False,
+    index_tuple: Tuple[torch.Tensor, list[int]] = None,
+    return_index_tuple: bool = False,
 ):
-    cirr_index = build_cirr_dataset(
-        split='val',
-        mode='images',
-        image_transform=model.image_processor,
-        caption_transform=model.tokenizer,
-        max_length_tokenizer=77
-    )
+    if index_tuple is None:
+        cirr_index = build_cirr_dataset(
+            split='val',
+            mode='images',
+            image_transform=model.image_processor,
+            caption_transform=model.tokenizer,
+            max_length_tokenizer=77
+        )
 
     cirr_triplets = build_cirr_dataset(
         split='val',
@@ -268,14 +272,17 @@ def evaluate_cirr(
         max_length_tokenizer=77
     )
 
-    index_features, index_names = generate_cirr_index_features(
-        clip_model=model,
-        index_dataset=cirr_index,
-        batch_size=batch_size,
-        num_workers=num_workers,
-        use_tqdm=tqdm,
-        accelerator=accelerator
-    )
+    if index_tuple is None:
+        index_features, index_names = generate_cirr_index_features(
+            clip_model=model,
+            index_dataset=cirr_index,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            use_tqdm=tqdm,
+            accelerator=accelerator
+        )
+    else:
+        index_features, index_names = index_tuple
 
     predicted_features, reference_names, target_names, group_members, pair_ids = generate_cirr_predictions(
         clip_model=model,
@@ -301,6 +308,8 @@ def evaluate_cirr(
         k_values_subset = [1,2,3],
     )
 
+    if return_index_tuple:
+        return metrics, (index_features, index_names)
     return metrics
 
 
@@ -311,18 +320,21 @@ def generate_cirr_test_submission(
     num_workers: int = 4,
     tqdm : bool = False,
     accelerator=None,
+    index_tuple: Tuple[torch.Tensor, list[int]] = None,
+    return_index_tuple: bool = False,
 ):
     """
     Similar to evaluate_cirr but for test set. 
-    It return a dict with two keys: 'subset_top_{k}_retrieved_names' and 'top_{k}_retrieved_names', each containing a dict of pair_id -> list[retrieved names].
+    It return a dict with two keys: 'subset_top_3' and 'top_50', each containing a dict of pair_id -> list[retrieved names].
     """
-    cirr_index = build_cirr_dataset(
-        split='test1',
-        mode='images',
-        image_transform=model.image_processor,
-        caption_transform=model.tokenizer,
-        max_length_tokenizer=77
-    )
+    if index_tuple is None:
+        cirr_index = build_cirr_dataset(
+            split='test1',
+            mode='images',
+            image_transform=model.image_processor,
+            caption_transform=model.tokenizer,
+            max_length_tokenizer=77
+        )
 
     cirr_triplets = build_cirr_dataset(
         split='test1',
@@ -332,14 +344,17 @@ def generate_cirr_test_submission(
         max_length_tokenizer=77
     )
 
-    index_features, index_names = generate_cirr_index_features(
-        clip_model=model,
-        index_dataset=cirr_index,
-        batch_size=batch_size,
-        num_workers=num_workers,
-        use_tqdm=tqdm,
-        accelerator=accelerator
-    )
+    if index_tuple is None:
+        index_features, index_names = generate_cirr_index_features(
+            clip_model=model,
+            index_dataset=cirr_index,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            use_tqdm=tqdm,
+            accelerator=accelerator
+        )
+    else:
+        index_features, index_names = index_tuple
 
     predicted_features, reference_names, target_names, group_members, pair_ids = generate_cirr_predictions(
         clip_model=model,
@@ -365,4 +380,6 @@ def generate_cirr_test_submission(
         k_values_subset=[3],  # retrieve top-3 for test subset test submission
     )
 
+    if return_index_tuple:
+        return submission, (index_features, index_names)
     return submission   

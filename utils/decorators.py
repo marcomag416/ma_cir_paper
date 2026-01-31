@@ -18,7 +18,10 @@ def timed_metric(func: Callable[[], dict]) -> Callable[[], dict]:
         metrics = func(*args, **kwargs)
         runtime = time.time() - start_time
 
-        assert isinstance(metrics, dict), "The decorated function must return a dictionary."
+        # assert isinstance(metrics, dict), "The decorated function must return a dictionary."
+        if not isinstance(metrics, dict):
+            return metrics
+        
         if "runtime" in metrics:
             Warning("The decorated function's return dictionary already has a 'runtime' key. It will be overwritten.")
 

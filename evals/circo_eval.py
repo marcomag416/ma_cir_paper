@@ -218,7 +218,9 @@ def evaluate_circo(
     num_workers: int = 4,
     tqdm: bool = True,
     accelerator=None,
-) -> Tuple[Dict[int, float], Dict[int, float], Dict[str, float]]:
+    return_index_tuple: bool = False,
+    index_tuple: Tuple[torch.Tensor, List[int]] = None,
+) -> Tuple[Dict[int, float], Tuple[torch.Tensor, List[int]]] | Dict[int, float]:
     relative_dataset = build_circo_dataset(
         split='val',
         mode='relative',
@@ -226,13 +228,14 @@ def evaluate_circo(
         tokenizer=model.tokenizer,
         max_length_tokenizer=77,
     )
-    database_dataset = build_circo_dataset(
-        split='val',
-        mode='classic',
-        preprocess=model.image_processor,
-        tokenizer=model.tokenizer,
-        max_length_tokenizer=77,
-    )
+    if index_tuple is None:
+        database_dataset = build_circo_dataset(
+            split='val',
+            mode='classic',
+            preprocess=model.image_processor,
+            tokenizer=model.tokenizer,
+            max_length_tokenizer=77,
+        )
 
     predicted_features, query_ids, reference_ids = generate_circo_predictions(
         model,
@@ -244,14 +247,17 @@ def evaluate_circo(
         accelerator
     )
 
-    index_features, index_ids = generate_circo_index_features(
-        model,
-        database_dataset,
-        batch_size,
-        num_workers,
-        tqdm,
-        accelerator
-    )
+    if index_tuple is None:
+        index_features, index_ids = generate_circo_index_features(
+            model,
+            database_dataset,
+            batch_size,
+            num_workers,
+            tqdm,
+            accelerator
+        )
+    else:
+        index_features, index_ids = index_tuple
 
     predictions_dict = compute_prediction_dict(
         predicted_features,
@@ -274,10 +280,68 @@ def evaluate_circo(
     for aspect, value in semantic_map_at10.items():
         metrics[f'semantic_mAP_at10_{aspect}'] = value * 100
 
+    if return_index_tuple:
+        return metrics, (index_features, index_ids)
     return metrics
     
+def generate_circo_test_submission(
+    model: TwoEncoderVLM,
+    fusion_type: str = 'sum',
+    batch_size: int = 64,
+    num_workers: int = 4,
+    tqdm: bool = True,
+    accelerator=None,
+    return_index_tuple: bool = False,
+    index_tuple: Tuple[torch.Tensor, List[int]] = None,
+) -> Dict[int, List[int]] | Tuple[Dict[int, List[int]], Tuple[torch.Tensor, List[int]]]:
+    relative_dataset = build_circo_dataset(
+        split='test',
+        mode='relative',
+        preprocess=model.image_processor,
+        tokenizer=model.tokenizer,
+        max_length_tokenizer=77,
+    )
+    if index_tuple is None:
+        database_dataset = build_circo_dataset(
+            split='test',
+            mode='classic',
+            preprocess=model.image_processor,
+            tokenizer=model.tokenizer,
+            max_length_tokenizer=77,
+        )
 
+    predicted_features, query_ids, reference_ids = generate_circo_predictions(
+        model,
+        relative_dataset,
+        fusion_type,
+        batch_size,
+        num_workers,
+        tqdm,
+        accelerator
+    )
+
+    if index_tuple is None:
+        index_features, index_ids = generate_circo_index_features(
+        model,
+        database_dataset,
+        batch_size,
+        num_workers,
+        tqdm,
+        accelerator
+        )
+    else:
+        index_features, index_ids = index_tuple
+
+    predictions_dict = compute_prediction_dict(
+        predicted_features,
+        query_ids,
+        reference_ids,
+        index_features,
+        index_ids,
+        num_candidates=50
+    )
+
+    if return_index_tuple:
+        return predictions_dict, (index_features, index_ids)
+    return predictions_dict
         
-
-
-
