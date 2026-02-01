@@ -3,7 +3,9 @@ from xml.parsers.expat import model
 from evals.circo_eval import evaluate_circo, generate_circo_test_submission
 from evals.cirr_eval import evaluate_cirr, generate_cirr_test_submission
 from evals.ma_cir_eval import evaluate_macir
+from evals.metrics import plot_sim_distributions
 from evals.simat_eval import evaluate_simat
+from evals.mscoco_eval import eval_mscoco
 from models import TwoEncoderVLM, AutoModel, AutoConfig
 from utils.dict import prepend_key_to_dict, save_to_csv
 import torch
@@ -80,7 +82,18 @@ def test_model(
             accelerator=None
         )
         metrics.update(prepend_key_to_dict("macir_", ma_cir_metrics))
-	
+
+    if "mscoco" not in skip_metrics:
+        mscoco_metrics, mscoco_sim_distributions = eval_mscoco(
+            model=model,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            tqdm=tqdm,
+            accelerator=None,
+            split='val',
+        )
+        metrics.update(prepend_key_to_dict("mscoco_", mscoco_metrics))
+        cached_data['mscoco_sim_distributions'] = mscoco_sim_distributions
     return metrics, cached_data
 
 def main(args):
@@ -142,27 +155,40 @@ def main(args):
         index_tuple=cached_data['cirr_index_tuple'] if 'cirr_index_tuple' in cached_data else None,
     )
 
-    cirr_recall_dict, cirr_subset_recall_dict = cirr_test_sub['top_50'], cirr_test_sub['subset_top_3']
-    cirr_recall_dict.update({"version": "rc2", "metric": "recall"})
-    cirr_subset_recall_dict.update({"version": "rc2", "metric": "recall_subset"})
+    if "cirr" not in args.skip_submission:
+        cirr_recall_dict, cirr_subset_recall_dict = cirr_test_sub['top_50'], cirr_test_sub['subset_top_3']
+        cirr_recall_dict.update({"version": "rc2", "metric": "recall"})
+        cirr_subset_recall_dict.update({"version": "rc2", "metric": "recall_subset"})
 
-    with open(os.path.join(output_path, "cirr_test_submission.json"), 'w') as f:
-        json.dump(cirr_recall_dict, f, indent=None)
+        with open(os.path.join(output_path, "cirr_test_submission.json"), 'w') as f:
+            json.dump(cirr_recall_dict, f, indent=None)
 
-    with open(os.path.join(output_path, "cirr_subset_test_submission.json"), 'w') as f:
-        json.dump(cirr_subset_recall_dict, f, indent=None)
+        with open(os.path.join(output_path, "cirr_subset_test_submission.json"), 'w') as f:
+            json.dump(cirr_subset_recall_dict, f, indent=None)
 
-    circo_test_sub = generate_circo_test_submission(
-        model=model,
-        fusion_type=args.fusion_type,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        tqdm=args.tqdm,
-        index_tuple=cached_data['circo_index_tuple'] if 'circo_index_tuple' in cached_data else None,
-    )
+    if "circo" not in args.skip_submission:
+        circo_test_sub = generate_circo_test_submission(
+            model=model,
+            fusion_type=args.fusion_type,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+            tqdm=args.tqdm,
+            index_tuple=cached_data['circo_index_tuple'] if 'circo_index_tuple' in cached_data else None,
+        )
 
-    with open(os.path.join(output_path, "circo_test_submission.json"), 'w') as f:
-        json.dump(circo_test_sub, f, indent=None)
+        with open(os.path.join(output_path, "circo_test_submission.json"), 'w') as f:
+            json.dump(circo_test_sub, f, indent=None)
+
+    if "mscoco_sim_distributions" in cached_data:
+        pos_sim, rnd_sim = cached_data['mscoco_sim_distributions']
+        if args.save_sim_distributions:
+            torch.save(pos_sim, os.path.join(output_path, "mscoco_pos_sims.pt"))
+            torch.save(rnd_sim, os.path.join(output_path, "mscoco_rnd_sims.pt"))
+        plot_sim_distributions(
+            pos_similarities=pos_sim,
+            rnd_similarities=rnd_sim,
+            save_path=os.path.join(output_path, "mscoco_sim_distribution.svg"),
+        )
 
 
 
@@ -181,6 +207,7 @@ if __name__ == "__main__":
     parser.add_argument("--no_peft", action='store_true', help="Do not use PEFT model.")
     parser.add_argument("--skip_metrics", nargs='*', default=[], help="List of metrics to skip during evaluation.")
     parser.add_argument("--skip_submission", nargs='*', default=[], help="List of metrics to skip during evaluation.")
+    parser.add_argument("--save_sim_distributions", action='store_true', help="Save similarity distributions.")
     args = parser.parse_args()
     main(args)
 
