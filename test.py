@@ -58,17 +58,15 @@ def test_model(
         cached_data['circo_index_tuple'] = circo_index_tuple
 
     if "cirr" not in skip_metrics:
-        cirr_metrics, cirr_index_tuple = evaluate_cirr(
+        cirr_metrics = evaluate_cirr(
             model=model,
             fusion_type=fusion_type,
             batch_size=batch_size,
             num_workers=num_workers,
             tqdm=tqdm,
             accelerator=None,
-            return_index_tuple=True
         )
         metrics.update(prepend_key_to_dict("cirr_", cirr_metrics))
-        cached_data['cirr_index_tuple'] = cirr_index_tuple
 
     if "macir" not in skip_metrics:
         ma_cir_metrics = evaluate_macir(
@@ -110,7 +108,9 @@ def main(args):
         print("No GPU available, using CPU.")
         device = torch.device("cpu")
 
-    newdirname = os.path.basename(model_config_path.rstrip('/')) + "-" + os.path.basename(checkpoint_path.rstrip('/'))
+    dirname_ck_component = os.path.basename(checkpoint_path.rstrip('/')) if not args.zero_shot else "zero-shot"
+    dirname_config_component = os.path.basename(model_config_path.rstrip('/'))
+    newdirname = dirname_config_component + "-" + dirname_ck_component + '-' + args.fusion_type
     output_path = os.path.join(args.output_path, newdirname)
     os.makedirs(output_path, exist_ok=True)
 
@@ -119,12 +119,16 @@ def main(args):
     config = AutoConfig.from_pretrained(model_config_path)
     model = AutoModel.from_config(config)
 
-    if not args.no_peft:
+    if args.zero_shot:
+        print("Zero-shot model specified; skipping loading of adapter or full model weights.")
+
+    elif not args.no_peft:
         adapter_path = os.path.join(checkpoint_path, "lora_adapter")
         if not os.path.exists(adapter_path):
             raise FileNotFoundError(f"PEFT adapter path does not exist: {adapter_path}")
         print("Loading PEFT adapter from:", adapter_path)
         model = model.apply_peft_from_pretrained(adapter_path)
+        
     else:
         if not os.path.exists(checkpoint_path):
             raise FileNotFoundError(f"Model checkpoint path does not exist: {checkpoint_path}")
@@ -146,16 +150,17 @@ def main(args):
 
 
     #generate and save submissions to file
-    cirr_test_sub = generate_cirr_test_submission(
-        model=model,
-        fusion_type=args.fusion_type,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        tqdm=args.tqdm,
-        index_tuple=cached_data['cirr_index_tuple'] if 'cirr_index_tuple' in cached_data else None,
-    )
+    
 
     if "cirr" not in args.skip_submission:
+        cirr_test_sub = generate_cirr_test_submission(
+            model=model,
+            fusion_type=args.fusion_type,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+            tqdm=args.tqdm,
+        )
+
         cirr_recall_dict, cirr_subset_recall_dict = cirr_test_sub['top_50'], cirr_test_sub['subset_top_3']
         cirr_recall_dict.update({"version": "rc2", "metric": "recall"})
         cirr_subset_recall_dict.update({"version": "rc2", "metric": "recall_subset"})
@@ -198,7 +203,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Test model.")
     # Add arguments as needed
-    parser.add_argument("--checkpoint_path", type=str, required=True, help="Path to the model checkpoint.")
+    parser.add_argument("--checkpoint_path", type=str, required=True, help="Path to the model checkpoint. Model config will be loaded from the parent directory.")
     parser.add_argument("--batch_size", type=int, default=64, help="Batch size for evaluation.")
     parser.add_argument("--num_workers", type=int, default=4, help="Number of workers for data loading.")
     parser.add_argument("--fusion_type", type=str, default="sum", help="Fusion type for evaluation.")
@@ -208,6 +213,7 @@ if __name__ == "__main__":
     parser.add_argument("--skip_metrics", nargs='*', default=[], help="List of metrics to skip during evaluation.")
     parser.add_argument("--skip_submission", nargs='*', default=[], help="List of metrics to skip during evaluation.")
     parser.add_argument("--save_sim_distributions", action='store_true', help="Save similarity distributions.")
+    parser.add_argument("--zero-shot", action='store_true', help="Indicates if the model is zero-shot. Adapter or full model weights are ignored if set. Model config is still loaded from checkpoint path parent directory.")
     args = parser.parse_args()
     main(args)
 

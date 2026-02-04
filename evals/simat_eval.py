@@ -11,6 +11,7 @@ from tqdm.auto import tqdm
 from datasets.simat import SIMATDataset, build_simat_dataset
 from models import TwoEncoderVLM
 from utils.decorators import timed_metric
+from utils.tensor import make_normalized
 
 DEBUG=False
 
@@ -19,9 +20,6 @@ def take_topk(candidates, target, top_k):
     tops = [r for r in candidates if r.item() != target]
 
     return tops[:top_k]
-
-def make_normalized(x):
-    return x/x.norm(dim=-1, keepdim=True)
 
 
 def compute_simat_scores(

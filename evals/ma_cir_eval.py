@@ -14,7 +14,9 @@ from tqdm.auto import tqdm
 from contextlib import nullcontext
 
 from utils.decorators import timed_metric
+from utils.tensor import make_normalized
 from utils.transformers import is_accelerator
+from fusion import fusion
 
 
 def macir_compute_test_metrics(
@@ -317,10 +319,11 @@ def macir_generate_test_predictions(
         with device_ctx():
             image_features = vision_encoder(reference_images).image_embeds
             text_features = text_encoder(input_ids=relative_captions, attention_mask=attention_mask).text_embeds
-            if fusion_type == 'sum':
-                predicted_features = image_features + text_features
-            else:
-                raise ValueError(f"Unknown fusion_type: {fusion_type}")
+            predicted_features = fusion(
+                image_features=image_features,
+                text_features=text_features,
+                fusion_type=fusion_type
+            )
         
         all_predicted_features.append(predicted_features)
         all_reference_names.extend(reference_names)
@@ -372,6 +375,7 @@ def macir_generate_index_features(
         all_index_names.extend(image_names)
 
     all_index_features = torch.vstack(all_index_features)
+    all_index_features = make_normalized(all_index_features)
 
     return all_index_features, all_index_names  
     

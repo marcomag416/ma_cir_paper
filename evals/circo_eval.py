@@ -13,10 +13,12 @@ import torch
 from tqdm.auto import tqdm
 
 from datasets.circo import CIRCODataset, build_circo_dataset
+from fusion import fusion
 from models import TwoEncoderVLM
 from torch.utils.data import DataLoader
 
 from utils.decorators import timed_metric
+from utils.tensor import make_normalized
 
 
 base_path = Path(__file__).absolute().parents[1].absolute()  # Getting the path to the base directory
@@ -128,10 +130,11 @@ def generate_circo_predictions(
         image_features = vision_encoder(reference_images).image_embeds
         text_features = text_encoder(input_ids=input_ids, attention_mask=attention_mask).text_embeds
 
-        if fusion_type == 'sum':
-            predicted_features = image_features + text_features
-        else:
-            raise ValueError(f"Unsupported fusion type: {fusion_type}")
+        predicted_features = fusion(
+            image_features=image_features,
+            text_features=text_features,
+            fusion_type=fusion_type
+        )
         
         all_predictions.append(predicted_features)
         all_query_ids.extend(query_ids)
@@ -173,6 +176,7 @@ def generate_circo_index_features(
         all_image_ids.extend(image_ids)
 
     all_image_features = torch.vstack(all_image_features)
+    all_image_features = make_normalized(all_image_features)
     return all_image_features, all_image_ids
 
 def compute_prediction_dict(

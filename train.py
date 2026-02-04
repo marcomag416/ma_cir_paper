@@ -345,6 +345,7 @@ def main(args):
 		cache_dir=run_config.get("cache_dir", ".cache"),
 		logit_scale=logit_scale,
 		trainable_temp=trainable_temp,
+		encoder_to_freeze=run_config.get("encoder_to_freeze", "none")
 	)
 
 	model = AutoModel.from_config(model_config)
@@ -358,10 +359,10 @@ def main(args):
 			r=run_config.get("lora_rank", 16),
 			lora_alpha=run_config.get("lora_alpha", 16),
 			lora_dropout=run_config.get("lora_dropout", 0.1),
-			target_modules=["q_proj", "k_proj", "v_proj", "out_proj", "fc1", "fc2", "text_projection", "visual_projection", "position_embedding", "token_embedding", "patch_embedding"],
+			# target_modules=["q_proj", "k_proj", "v_proj", "out_proj", "fc1", "fc2", "text_projection", "visual_projection", "position_embedding", "token_embedding", "patch_embedding"],
 		)
 
-		model = model.create_peft_model(lora_config, adapter_name="lora_adapter")
+		model = model.create_peft_model(lora_config, adapter_name="lora_adapter", adapter_type=run_config.get("adapter_type", "all"))
 
 	loss_name = run_config.get("loss", "clip")
 	loss_fn = build_loss_fn(loss_name, **run_config.get("loss_params", {}))

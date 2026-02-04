@@ -11,6 +11,8 @@ from torch.utils.data import Dataset
 
 from datasets.cirr import build_cirr_dataset
 from utils.decorators import timed_metric
+from utils.tensor import make_normalized
+from fusion import fusion
 
 DEBUG = False
 
@@ -62,6 +64,15 @@ def compute_cirr_metrics(
         dict: Dictionary containing evaluation metrics.
     """
 
+    if DEBUG:
+        print(f"index_features shape: {index_features.shape}")
+        print(f"predicted_features shape: {predicted_features.shape}")
+        print(f"Number of index names: {len(index_names)}")
+        print(f"Number of reference names: {len(reference_names)}")
+        print(f"Number of target names: {len(target_names)}")
+        print(f"Number of group members: {len(group_members)}")
+        print(f"Number of pair ids: {len(pair_ids)}")
+
     similarities = predicted_features @ index_features.T  # (N, M)
     #sorted indices of database images (row-wise) for each query
     sorted_indices = torch.argsort(similarities, dim=1, descending=True).cpu()  # (N, M)
@@ -78,6 +89,11 @@ def compute_cirr_metrics(
             len(pair_ids), -1
         )
     )
+    if DEBUG:
+        print(f"sorted_index_names shape: {sorted_index_names.shape}")
+        print(f"reference_mask shape: {reference_mask.shape}")
+        print(f"Number of True in reference_mask (should be N*(M-1)): {torch.sum(reference_mask).item()}")
+
     # Apply the mask and reshape back to (N, M-1).
     # Now each row corresponds to candidates excluding the exact reference image.
     sorted_index_names = sorted_index_names[reference_mask].reshape(
@@ -172,6 +188,7 @@ def generate_cirr_index_features(
         all_image_names.extend(batch['image_name'])
 
     all_image_features = torch.vstack(all_image_features)
+    all_image_features = make_normalized(all_image_features)
 
     return all_image_features, all_image_names
 
@@ -229,10 +246,11 @@ def generate_cirr_predictions(
             attention_mask=attention_masks
         ).text_embeds
 
-        if fusion_type == 'sum':
-            predicted_features = reference_features + caption_features
-        else:
-            raise ValueError(f"Unknown fusion type: {fusion_type}")
+        predicted_features = fusion(
+            image_features=reference_features,
+            text_features=caption_features,
+            fusion_type=fusion_type
+        )
         
         all_predicted_features.append(predicted_features)
         all_reference_names.extend(reference_names)

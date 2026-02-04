@@ -1,5 +1,6 @@
 #Adatapted from https://github.com/jaeseokbyun/MACIR/blob/main/models.py
 
+from copy import copy
 from os import PathLike
 from typing import Literal
 from transformers import CLIPTextModelWithProjection, CLIPVisionModelWithProjection, CLIPImageProcessor, CLIPTokenizer, PreTrainedModel, PretrainedConfig, AutoConfig, AutoModel
@@ -52,12 +53,14 @@ class TwoEncoderVLMConfig(PretrainedConfig):
             self, 
             logit_scale: float = 100, 
             trainable_temp: bool = False, 
+            encoder_to_freeze: Literal['vision', 'text', 'none'] = 'none',
             **kwargs
     ):
         
         super().__init__(**kwargs)
         self.logit_scale = logit_scale
         self.trainable_temp = trainable_temp
+        self.encoder_to_freeze = encoder_to_freeze
 
 class LogitScaleModule(torch.nn.Module):
     # We wrap the parameter in a module to be able to use PEFT
@@ -83,6 +86,21 @@ class TwoEncoderVLM(PreTrainedModel):
         if self.config.trainable_temp:
             self.logit_scale_module = LogitScaleModule(self.logit_scale)
 
+        unfrozen_modules = []
+        if self.config.encoder_to_freeze == 'vision':
+            for param in self.vision.parameters():
+                param.requires_grad = False
+        else:
+            unfrozen_modules.append('vision')
+
+        if self.config.encoder_to_freeze == 'text':
+            for param in self.text.parameters():
+                param.requires_grad = False
+        else:
+            unfrozen_modules.append('text')
+
+        self.unfrozen_modules_prefix = '|'.join(unfrozen_modules)
+
     def forward(self, pixel_values, input_ids, attention_mask=None, image_name=None, **kwargs):
         vision_out = self.vision(pixel_values=pixel_values)
         text_out = self.text(input_ids=input_ids, attention_mask=attention_mask)
@@ -101,12 +119,21 @@ class TwoEncoderVLM(PreTrainedModel):
     def create_peft_model(
             self, 
             lora_config: LoraConfig, 
-            adapter_name: str ="adapter"
+            adapter_name: str ="adapter",
+            adapter_type: Literal ['all', 'no_proj'] = 'all',
         ) -> PeftModel:
+        lora_config = copy(lora_config)
+        if lora_config.modules_to_save is None:
+            lora_config.modules_to_save = []
         if self.config.trainable_temp:
-            lora_config.modules_to_save = lora_config.modules_to_save + ["logit_scale_module"] if lora_config.modules_to_save is not None else ["logit_scale_module"]
+            lora_config.modules_to_save = lora_config.modules_to_save + ["logit_scale_module"] 
+        if adapter_type == 'no_proj':
+            lora_config.modules_to_save = lora_config.modules_to_save + ["text_projection", "visual_projection"]
+        
         if lora_config.task_type is None:
             lora_config.task_type = "FEATURE_EXTRACTION"
+
+        lora_config.target_modules = rf"({self.unfrozen_modules_prefix}).*(q_proj|k_proj|v_proj|out_proj|fc1|fc2|text_projection|visual_projection|position_embedding|token_embedding|patch_embedding)"    
 
         model_peft = get_peft_model(self, lora_config, adapter_name=adapter_name)
         return model_peft
