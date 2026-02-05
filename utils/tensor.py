@@ -30,16 +30,11 @@ def slerp(a: torch.Tensor, b: torch.Tensor, alpha: float) -> torch.Tensor:
     a = make_normalized(a)
     b = make_normalized(b)
     dot_product = torch.sum(a * b, dim=-1, keepdim=True)
-    theta = torch.acos(torch.clamp(dot_product, -1.0, 1.0))
+    eps = 5e-8 if a.dtype == torch.float32 else 5e-4
+    # Clamp dot_product to ensure theta is never exactly 0 or pi
+    theta = torch.acos(torch.clamp(dot_product, -1.0 + eps, 1.0 - eps))
     sin_theta = torch.sin(theta)
-    
-    #if angle is zero, return a to avoid division by zero
-    identity_mask = (sin_theta == 0)
-
-
-    # Avoid division by zero by replacing zeros with an arbitrary value (the affected values will be ignored due to the identity_mask)
-    sin_theta = torch.where(identity_mask, torch.tensor(0.5, device=sin_theta.device), sin_theta)
     
     slerp_a = (torch.sin((1 - alpha) * theta) / sin_theta) * a
     slerp_b = (torch.sin(alpha * theta) / sin_theta) * b
-    return  torch.where(identity_mask, a, slerp_a + slerp_b)
+    return  slerp_a + slerp_b
