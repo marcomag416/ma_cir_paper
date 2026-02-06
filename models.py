@@ -54,6 +54,7 @@ class TwoEncoderVLMConfig(PretrainedConfig):
             logit_scale: float = 100, 
             trainable_temp: bool = False, 
             encoder_to_freeze: Literal['vision', 'text', 'none'] = 'none',
+            alpha_slerp: float = 0.8,
             **kwargs
     ):
         
@@ -61,6 +62,7 @@ class TwoEncoderVLMConfig(PretrainedConfig):
         self.logit_scale = logit_scale
         self.trainable_temp = trainable_temp
         self.encoder_to_freeze = encoder_to_freeze
+        self.alpha_slerp = alpha_slerp
 
 class LogitScaleModule(torch.nn.Module):
     # We wrap the parameter in a module to be able to use PEFT
@@ -114,6 +116,7 @@ class TwoEncoderVLM(PreTrainedModel):
             "vision_outputs": vision_out,
             "text_outputs": text_out,
             "logit_scale": logit_scale,
+            "alpha_slerp": self.config.alpha_slerp
         }
     
     def create_peft_model(

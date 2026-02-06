@@ -345,6 +345,7 @@ def main(args):
 		cache_dir=run_config.get("cache_dir", ".cache"),
 		logit_scale=logit_scale,
 		trainable_temp=trainable_temp,
+		alpha_slerp=run_config.get("alpha_slerp", 0.8),
 		encoder_to_freeze=run_config.get("encoder_to_freeze", "none")
 	)
 

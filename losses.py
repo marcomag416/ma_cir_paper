@@ -48,7 +48,7 @@ def compute_MA_mono_sw_loss(delta_features, target_features, logit_scale, lambd=
     elif similarity=="delta":
         features_for_similarity = delta_features
     elif similarity=="none":
-        features_for_similarity = torch.ones((N*N,))
+        features_for_similarity = torch.ones((N*N,), device=device)
     else:
         raise ValueError(f"Invalid value for 'similarity'. Found {similarity}")
 
@@ -97,7 +97,7 @@ def compute_unslerp_mono_loss(delta_features, target_features, logit_scale, alph
     elif similarity=="delta":
         features_for_similarity = delta_features
     elif similarity=="none":
-        features_for_similarity = torch.ones((N*N,))
+        features_for_similarity = torch.ones((N*N,), device=device)
     else:
         raise ValueError(f"Invalid value for 'similarity'. Found {similarity}")
     
@@ -123,6 +123,7 @@ def build_loss_fn(loss_name, **kwargs):
         text_embeds = outputs["text_embeds"]
         vision_embeds = outputs["vision_embeds"]
         logit_scale = outputs["logit_scale"].to(text_embeds.device)
+        alpha_slerp = outputs["alpha_slerp"]
 
 
         with torch.autocast(text_embeds.device.type):
@@ -141,17 +142,17 @@ def build_loss_fn(loss_name, **kwargs):
             elif loss_name == "ma_q2i":
                 return compute_MA_mono_sw_loss(text_embeds, vision_embeds, logit_scale, similarity="none")
             elif loss_name == "unslerp_bi":
-                return compute_unslerp_bi_loss(vision_embeds, text_embeds, logit_scale, alpha=0.8, similarity="none")
+                return compute_unslerp_bi_loss(vision_embeds, text_embeds, logit_scale, alpha=alpha_slerp, similarity="none")
             elif loss_name == "unslerp_q2t":
-                return compute_unslerp_mono_loss(vision_embeds, text_embeds, logit_scale, alpha=0.2, similarity="none")
+                return compute_unslerp_mono_loss(vision_embeds, text_embeds, logit_scale, alpha=1-alpha_slerp, similarity="none")
             elif loss_name == "unslerp_q2i":
-                return compute_unslerp_mono_loss(text_embeds, vision_embeds, logit_scale, alpha=0.8, similarity="none")
+                return compute_unslerp_mono_loss(text_embeds, vision_embeds, logit_scale, alpha=alpha_slerp, similarity="none")
             elif loss_name == "unslerp_bi_sw":
-                return compute_unslerp_bi_loss(vision_embeds, text_embeds, logit_scale, alpha=0.8, similarity="delta")
+                return compute_unslerp_bi_loss(vision_embeds, text_embeds, logit_scale, alpha=alpha_slerp, similarity="delta")
             elif loss_name == "unslerp_q2t_sw":
-                return compute_unslerp_mono_loss(vision_embeds, text_embeds, logit_scale, alpha=0.2, similarity="delta")
+                return compute_unslerp_mono_loss(vision_embeds, text_embeds, logit_scale, alpha=1-alpha_slerp, similarity="delta")
             elif loss_name == "unslerp_q2i_sw":
-                return compute_unslerp_mono_loss(text_embeds, vision_embeds, logit_scale, alpha=0.8, similarity="delta")
+                return compute_unslerp_mono_loss(text_embeds, vision_embeds, logit_scale, alpha=alpha_slerp, similarity="delta")
             else:
                 raise ValueError(f"Invalid value for 'loss_name'. Found {loss_name}")
         
