@@ -112,8 +112,8 @@ def compute_unslerp_mono_loss(delta_features, target_features, logit_scale, alph
     unweighted_loss =  torch.nn.functional.cross_entropy(logits, labels, reduction='none')
     return (unweighted_loss * weights).sum() / weights.sum()
     
-def compute_unslerp_bi_loss(image_features, text_features, logit_scale, alpha=0.8, sim_grad=True, similarity="none"):
-    loss1 = compute_unslerp_mono_loss(image_features, text_features, logit_scale, 1-alpha, sim_grad, similarity)
+def compute_unslerp_bi_loss(image_features, text_features, logit_scale, alpha=0.8, sim_grad=True, similarity="none", symmetric_alpha=False):
+    loss1 = compute_unslerp_mono_loss(image_features, text_features, logit_scale, alpha if symmetric_alpha else 1-alpha, sim_grad, similarity)
     loss2 = compute_unslerp_mono_loss(text_features, image_features, logit_scale, alpha, sim_grad, similarity)
     return (loss1 + loss2) / 2
 
@@ -149,6 +149,8 @@ def build_loss_fn(loss_name, **kwargs):
                 return compute_unslerp_mono_loss(text_embeds, vision_embeds, logit_scale, alpha=alpha_slerp, similarity="none")
             elif loss_name == "unslerp_bi_sw":
                 return compute_unslerp_bi_loss(vision_embeds, text_embeds, logit_scale, alpha=alpha_slerp, similarity="delta")
+            elif loss_name == "unslerp_bi_sw_sym":
+                return compute_unslerp_bi_loss(vision_embeds, text_embeds, logit_scale, alpha=alpha_slerp, similarity="delta", symmetric_alpha=True)
             elif loss_name == "unslerp_q2t_sw":
                 return compute_unslerp_mono_loss(vision_embeds, text_embeds, logit_scale, alpha=1-alpha_slerp, similarity="delta")
             elif loss_name == "unslerp_q2i_sw":
