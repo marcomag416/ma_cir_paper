@@ -6,7 +6,8 @@ from utils.tensor import make_normalized, slerp
 def fusion(
         image_features : torch.Tensor,
         text_features : torch.Tensor, 
-        fusion_type : Literal["sum", "slerp"]="sum"
+        fusion_type : Literal["sum", "slerp"]="sum",
+        alpha: float = 0.8
 ) -> torch.Tensor:
     """
     Fuse image and text features using the specified fusion type.
@@ -15,6 +16,7 @@ def fusion(
         image_features (torch.Tensor): Tensor of shape (batch_size, feature_dim) representing image features.
         text_features (torch.Tensor): Tensor of shape (batch_size, feature_dim) representing text features.
         fusion_type (str): Type of fusion to apply. Options are 'sum', 'slerp'.
+        alpha (float): Interpolation factor for slerp fusion. Ignored if fusion_type is not 'slerp'.
 
     Returns:
         torch.Tensor: Fused features tensor.
@@ -27,7 +29,6 @@ def fusion(
         fused_features = image_features + text_features
     elif fusion_type == "slerp":
         # Spherical linear interpolation (slerp) with alpha=0.8
-        alpha = 0.8
         fused_features = slerp(image_features, text_features, alpha)
     else:
         raise ValueError(f"Unsupported fusion type: {fusion_type}. Supported types are 'sum' and 'slerp'.")

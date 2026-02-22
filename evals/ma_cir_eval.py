@@ -100,6 +100,7 @@ def macir_compute_test_metrics(
     #   - Only group by composition_type
     # =========================================================================
     if eval_level == "full":
+        avg = 0.0
         for comp_type in unique_composition_types:
             # Indices of queries with the given composition_type
             type_indices = [
@@ -135,7 +136,11 @@ def macir_compute_test_metrics(
             metrics[f"{comp_type}"] = {
                 "recall_at1": recall_at1,
             }
+            avg += recall_at1
 
+        metrics["avg"] = {
+            "recall_at1": avg / len(unique_composition_types),
+        }
         return metrics
 
     # =========================================================================
@@ -333,7 +338,68 @@ def macir_generate_test_predictions(
 
     all_predicted_features = torch.vstack(all_predicted_features)
 
-    return (all_predicted_features, all_reference_names, all_target_names, all_composition_types, all_condition_types)    
+    return (all_predicted_features, all_reference_names, all_target_names, all_composition_types, all_condition_types)  
+
+@torch.no_grad()
+def macir_generate_triplet_features(
+    clip_model: TwoEncoderVLM, 
+    query_test_dataset: Dataset, 
+    batch_size: int = 64, 
+    num_workers: int = 4, 
+    use_tqdm: bool = False,
+    accelerator = None
+):
+    pin_mem = (accelerator is None and torch.cuda.is_available())
+    dataloader = DataLoader(query_test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_mem)
+    
+    clip_model.eval()
+    vision_encoder = clip_model.vision
+    text_encoder = clip_model.text
+
+    if accelerator:
+        dataloader = accelerator.prepare(dataloader)
+        vision_encoder, text_encoder = accelerator.prepare(vision_encoder, text_encoder)
+        device_ctx = accelerator.autocast
+    else:
+        device_ctx = nullcontext
+
+    all_image_features = []
+    all_text_features = []
+    all_reference_names = []
+    all_target_names = []
+    all_composition_types = []
+    all_condition_types = []
+
+    for batch in tqdm(dataloader, disable=not use_tqdm, desc="Generating MACIR triplet features"):
+        if accelerator:
+            reference_images = batch['reference_image']
+            relative_captions = batch['relative_caption']
+            attention_mask = batch['attention_mask']
+        else:
+            reference_images = batch['reference_image'].to(vision_encoder.device)
+            relative_captions = batch['relative_caption'].to(text_encoder.device)
+            attention_mask = batch['attention_mask'].to(text_encoder.device)
+
+        reference_names = batch['reference_name']
+        target_names = batch['target_name']
+        composition_types = batch['composition_type']
+        condition_types = batch['condition_type']
+
+        with device_ctx():
+            image_features = vision_encoder(reference_images).image_embeds
+            text_features = text_encoder(input_ids=relative_captions, attention_mask=attention_mask).text_embeds
+        
+        all_image_features.append(image_features)
+        all_text_features.append(text_features)
+        all_reference_names.extend(reference_names)
+        all_target_names.extend(target_names)
+        all_composition_types.extend(composition_types)
+        all_condition_types.extend(condition_types)
+
+    all_image_features = torch.vstack(all_image_features)
+    all_text_features = torch.vstack(all_text_features)
+
+    return (all_image_features, all_text_features, all_reference_names, all_target_names, all_composition_types, all_condition_types) 
 
 @torch.no_grad()
 def macir_generate_index_features(
@@ -442,3 +508,59 @@ def evaluate_macir(
         split=split,
     )
     return metrics
+
+def macir_test_alpha(
+    model: TwoEncoderVLM,
+    alphas: list[int],
+    batch_size: int = 64,
+    num_workers: int = 4,
+    use_tqdm: bool = False,
+):
+    macir_db = build_macir_dataset(
+        split="",
+        mode="database",
+        preprocess=model.image_processor,
+        eval_level="full",
+        caption_transform=model.tokenizer,
+        max_length_tokenizer=77,
+    )
+    ma_cir_query = build_macir_dataset(
+        split="",
+        mode="query",
+        preprocess=model.image_processor,
+        eval_level="full",
+        caption_transform=model.tokenizer,
+        max_length_tokenizer=77,
+    )
+    index_features, index_names = macir_generate_index_features(
+        clip_model=model,
+        index_dataset=macir_db,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        use_tqdm=use_tqdm,
+    )
+
+    image_features, text_features, reference_names, target_names, composition_types, condition_types = macir_generate_triplet_features(
+        clip_model=model,
+        query_test_dataset=ma_cir_query,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        use_tqdm=use_tqdm,
+    )
+
+    alpha_scores = {}
+    for alpha in alphas:
+        predicted_features = fusion(image_features, text_features, fusion_type="slerp", alpha=alpha)
+        metrics = macir_compute_test_metrics(
+            predicted_features=predicted_features,
+            reference_names=reference_names,
+            target_names=target_names,
+            composition_types=composition_types,
+            condition_types=condition_types,
+            index_features=index_features,
+            index_names=index_names,
+            eval_level="full",
+            split="",
+        )
+        alpha_scores[alpha] = metrics
+    return alpha_scores

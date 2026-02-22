@@ -144,6 +144,51 @@ def generate_circo_predictions(
     return all_predictions, all_query_ids, all_reference_ids
 
 @torch.no_grad()
+def generate_circo_triplet_features(
+    clip_model :TwoEncoderVLM,
+    relative_dataset: CIRCODataset,
+    batch_size: int = 64,
+    num_workers: int = 4,
+    use_tqdm: bool = False,
+    accelerator=None,
+) -> Dict[int, List[int]]:
+    dataloader = DataLoader(
+        relative_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=True,
+    )
+
+    all_image_features = []
+    all_text_features = []
+    all_query_ids = []
+    all_reference_ids = []
+
+    clip_model.eval()
+    vision_encoder = clip_model.vision
+    text_encoder = clip_model.text
+
+    for batch in tqdm(dataloader, disable=not use_tqdm, desc="Generating CIRCO triplet features"):
+        reference_images = batch['reference_img'].to(vision_encoder.device)
+        input_ids = batch['input_ids'].to(text_encoder.device)
+        attention_mask = batch['attention_mask'].to(text_encoder.device)
+        query_ids = batch['query_id']
+        reference_id = batch['reference_imd_id']
+
+        image_features = vision_encoder(reference_images).image_embeds
+        text_features = text_encoder(input_ids=input_ids, attention_mask=attention_mask).text_embeds
+
+        all_image_features.append(image_features)
+        all_text_features.append(text_features)
+        all_query_ids.extend(query_ids)
+        all_reference_ids.extend(reference_id)
+
+    all_image_features = torch.vstack(all_image_features)
+    all_text_features = torch.vstack(all_text_features)
+    return all_image_features, all_text_features, all_query_ids, all_reference_ids
+
+@torch.no_grad()
 def generate_circo_index_features(
     clip_model :TwoEncoderVLM,
     database_dataset: CIRCODataset,
@@ -349,3 +394,63 @@ def generate_circo_test_submission(
         return predictions_dict, (index_features, index_ids)
     return predictions_dict
         
+def circo_test_alpha(
+    model: TwoEncoderVLM,
+    alphas: list[int],
+    batch_size: int = 64,
+    num_workers: int = 4,
+    use_tqdm: bool = False,
+):
+    circo_relative_dataset = build_circo_dataset(
+        split='val',
+        mode='relative',
+        preprocess=model.image_processor,
+        tokenizer=model.tokenizer,
+        max_length_tokenizer=77,
+    )
+    circo_database_dataset = build_circo_dataset(
+        split='val',
+        mode='classic',
+        preprocess=model.image_processor,
+        tokenizer=model.tokenizer,
+        max_length_tokenizer=77,
+    )
+
+    circo_index_features, circo_index_ids = generate_circo_index_features(
+        model,
+        circo_database_dataset,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        use_tqdm=use_tqdm,
+    )
+
+    circo_image_features, circo_text_features, circo_query_ids, circo_reference_ids = generate_circo_triplet_features(
+        model,
+        circo_relative_dataset,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        use_tqdm=use_tqdm,
+    )
+
+    scores_alpha = {}
+    for alpha in alphas:
+        predicted_features = fusion(circo_image_features, circo_text_features, fusion_type="slerp", alpha=alpha)
+        circo_predictions_dict = compute_prediction_dict(
+            predicted_features,
+            circo_query_ids,
+            circo_reference_ids,
+            circo_index_features,
+            circo_index_ids,
+        )
+
+        map_atk, recall_atk, _ = compute_metrics(
+            circo_relative_dataset,
+            circo_predictions_dict
+        )
+        scores_alpha[alpha] = {}
+        for rank, value in map_atk.items():
+            scores_alpha[alpha][f'mAP_at{rank}'] = value * 100
+        for rank, value in recall_atk.items():
+            scores_alpha[alpha][f'recall_at{rank}'] = value * 100
+
+    return scores_alpha
