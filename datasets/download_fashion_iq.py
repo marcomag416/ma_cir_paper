@@ -10,25 +10,25 @@ download url files from https://github.com/hongwang600/fashion-iq-metadata/tree/
 
 ### This is a script to download the fashion-iq dataset
 
-# python download_image_data.py --split=0
-# python download_image_data.py --split=1
-# python download_image_data.py --split=2
+# python download_fashion_iq.py --split=0
+# python download_fashion_iq.py --split=1
+# python download_fashion_iq.py --split=2
 
 parser = argparse.ArgumentParser(description="Download Fashion IQ images.")
 parser.add_argument('--split', type=int, default=0, help='split index: 0=dress, 1=shirt, 2=toptee')
 args = parser.parse_args()
 
-readpath = ['data/metadata/fashion_iq/image_url/asin2url.dress.txt', \
-            'data/metadata/fashion_iq/image_url/asin2url.shirt.txt', \
-            'data/metadata/fashion_iq/image_url/asin2url.toptee.txt']
+readpath = ['data/fashioniq/metadata/image_url/asin2url.dress.txt', \
+            'data/fashioniq/metadata/image_url/asin2url.shirt.txt', \
+            'data/fashioniq/metadata/image_url/asin2url.toptee.txt']
 
-savepath = ['data/images/fashion_iq/dress', \
-            'data/images/fashion_iq/shirt', \
-            'data/images/fashion_iq/toptee']
+savepath = ['data/fashioniq/images/dress', \
+            'data/fashioniq/images/shirt', \
+            'data/fashioniq/images/toptee']
 
-missing_file = ['data/logs/fashion_iq/missing_dress.log', \
-                'data/logs/fashion_iq/missing_shirt.log', \
-                'data/logs/fashion_iq/missing_toptee.log']
+missing_file = ['data/fashioniq/logs/missing_dress.log', \
+                'data/fashioniq/logs/missing_shirt.log', \
+                'data/fashioniq/logs/missing_toptee.log']
 
 k = args.split
 

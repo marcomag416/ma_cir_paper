@@ -1,4 +1,4 @@
-# metadata files can be downloaded with: curl -L -o ./data/metadata/laion  https://www.kaggle.com/api/v1/datasets/download/romainbeaumont/laion400m
+# metadata files can be downloaded with: curl -L -o ./data/laion/metadata  https://www.kaggle.com/api/v1/datasets/download/romainbeaumont/laion400m
 
 #run example: python utils/datasets/laion/sample_dataset.py --input_dir ./data/metadata/laion400m --output_dir ./data/metadata/laion_sampled --num_samples 2000000 --success_rate 0.6
 
