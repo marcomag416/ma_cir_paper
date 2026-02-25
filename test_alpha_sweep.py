@@ -3,6 +3,7 @@ import torch
 
 from evals.cirr_eval import cirr_test_alpha
 from evals.circo_eval import circo_test_alpha
+from evals.fashioniq_eval import fashioniq_test_alpha
 from evals.ma_cir_eval import macir_test_alpha
 from models import TwoEncoderVLM, AutoConfig, AutoModel
 import json
@@ -17,6 +18,17 @@ def test_alpha(
     num_workers: int = 4,
     use_tqdm: bool = False,
 ):
+    if "fashioniq" not in skip_datasets:
+        fashioniq_metrics = fashioniq_test_alpha(
+            model=model,
+            alphas=alphas,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            use_tqdm=use_tqdm,
+        )
+    else:
+        fashioniq_metrics = None
+        
     if "circo" not in skip_datasets:
         circo_metrics = circo_test_alpha(
             model=model,
@@ -50,7 +62,7 @@ def test_alpha(
     else:
         macir_metrics = None
 
-    return circo_metrics, cirr_metrics, macir_metrics
+    return circo_metrics, cirr_metrics, macir_metrics, fashioniq_metrics
 
 def plot_alpha_sweep(alphas, metric, metric_name, save_path):
     plt.figure(figsize=(8, 4))
@@ -108,7 +120,7 @@ def main(args):
 
     #compute and save metrics to file
     model.to(device)
-    circo_metrics, cirr_metrics, macir_metrics = test_alpha(
+    circo_metrics, cirr_metrics, macir_metrics, fashioniq_metrics = test_alpha(
         model=model,
         alphas=args.alphas,
         batch_size=args.batch_size,
@@ -116,6 +128,16 @@ def main(args):
         use_tqdm=args.tqdm,
         skip_datasets=args.skip_datasets,
     )
+
+    if fashioniq_metrics is not None:
+        with open(os.path.join(output_path, "alpha_sweep_fashioniq.json"), "w") as f:
+            json.dump(fashioniq_metrics, f, indent=4)
+        alphas = []
+        fashioniq_avg = []
+        for alpha, m_dict in fashioniq_metrics.items():
+            alphas.append(float(alpha))
+            fashioniq_avg.append(m_dict["avg_recall_at@10"])
+        plot_alpha_sweep(alphas, fashioniq_avg, "FashionIQ Avg R@10", os.path.join(output_path, "alpha_sweep_fashioniq_average.png"))
 
     if circo_metrics is not None:
         with open(os.path.join(output_path, "alpha_sweep_circo.json"), "w") as f:

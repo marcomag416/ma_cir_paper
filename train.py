@@ -5,6 +5,7 @@ import wandb
 from transformers import Trainer, TrainingArguments
 from evals.circo_eval import evaluate_circo
 from evals.cirr_eval import evaluate_cirr
+from evals.fashioniq_eval import evaluate_fashioniq
 from evals.ma_cir_eval import evaluate_macir
 from evals.simat_eval import evaluate_simat
 from evals.metrics import compute_modality_gap_metrics, compute_statistic_metrics
@@ -172,6 +173,16 @@ def evaluate_on_tasks(trainer: Trainer):
 			accelerator=trainer.accelerator
 		)
 		metrics.update(prepend_key_to_dict("circo/", circo_metrics))
+
+	fashioniq_metrics = evaluate_fashioniq(
+            model=model,
+            fusion_type="sum",
+            batch_size=trainer.args.per_device_eval_batch_size,
+            num_workers=trainer.args.dataloader_num_workers,
+            tqdm=not trainer.args.disable_tqdm,
+            accelerator=trainer.accelerator
+        )
+	metrics.update(prepend_key_to_dict("fashioniq/", fashioniq_metrics))
 
 	cirr_metrics = evaluate_cirr(
 		model=model,

@@ -2,6 +2,7 @@
 from xml.parsers.expat import model
 from evals.circo_eval import evaluate_circo, generate_circo_test_submission
 from evals.cirr_eval import evaluate_cirr, generate_cirr_test_submission
+from evals.fashioniq_eval import evaluate_fashioniq
 from evals.ma_cir_eval import evaluate_macir
 from evals.metrics import plot_sim_distributions
 from evals.simat_eval import evaluate_simat
@@ -32,6 +33,17 @@ def test_model(
 	
     metrics = {}
     cached_data = {}
+
+    if "fashioniq" not in skip_metrics:
+        fashioniq_metrics = evaluate_fashioniq(
+            model=model,
+            fusion_type=fusion_type,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            tqdm=tqdm,
+            accelerator=None,
+        )
+        metrics.update(prepend_key_to_dict("fashioniq_", fashioniq_metrics))
 
     if "simat" not in skip_metrics:
         simat_metrics = evaluate_simat(
