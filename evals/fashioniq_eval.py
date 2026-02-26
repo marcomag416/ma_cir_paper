@@ -25,7 +25,8 @@ def compute_fashioniq_metrics(
 ):
     """Compute FashionIQ evaluation metrics (R@K and mAP@K) grouped by class for the given index and predicted features. """
     metrics = {}
-    for cls in set(triplet_classes):
+    unique_classes = set(triplet_classes)
+    for cls in unique_classes:
         cls_index_indices = [i for i, c in enumerate(index_classes) if c == cls]
         cls_index_features = index_features[cls_index_indices]
         cls_index_names = [index_names[i] for i in cls_index_indices]
@@ -69,7 +70,7 @@ def compute_fashioniq_metrics(
 
     # compute averages across classes
     for k in k_values:
-        avg_recall_at_k = np.mean([metrics[f'{cls}_recall_at@{k}'] for cls in set(triplet_classes)] )
+        avg_recall_at_k = np.mean([metrics[f'{cls}_recall_at@{k}'] for cls in unique_classes] )
         metrics[f'avg_recall_at@{k}'] = avg_recall_at_k
 
     return metrics

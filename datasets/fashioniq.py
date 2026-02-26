@@ -21,7 +21,9 @@ class FashionIQ(Dataset):
         caption_transform (callable, optional): A function/transform that takes in the
             target and transforms it.
         max_length_tokenizer (int): The maximum length required by some text tokenizers,
-        no_cap_per_img (int): The number of captions for an image. Could be between 1 and 5 
+            used to truncate captions if necessary.
+        mode (str): Whether to return triplets of (candidate, caption, target) or just images. Options are 'triplets' or 'images'. 
+
     '''
 
     def __init__(
@@ -29,7 +31,7 @@ class FashionIQ(Dataset):
         images_path: str,
         annotations_path: str,
         logs_path: str,
-        split: str = 'train',
+        split: Literal['train', 'val'] = 'val',
         image_transform: Optional[Callable] = None,
         caption_transform: Optional[Callable] = None,
         max_length_tokenizer: int = 77,
@@ -64,19 +66,25 @@ class FashionIQ(Dataset):
             #load missing files
             log_path = os.path.join(logs_path, f"missing_{cls}.log")
             if not os.path.exists(log_path):
-                raise FileNotFoundError(f"Missing file log {log_path} does not exist.")
-            with open(log_path, 'r') as f:
-                missing_files = f.read().splitlines()
+                print( Warning(f"Missing file log {log_path} does not exist."))
+                missing_files = []
+            else:
+                with open(log_path, 'r') as f:
+                    missing_files = f.read().splitlines()
             # remove missing files from annotations
             for ann in annotations:
                 candidate_path = self.get_image_path(cls, ann['candidate'])
                 target_path = self.get_image_path(cls, ann['target'])
                 if ann['candidate'] not in missing_files and ann['target'] not in missing_files and os.path.exists(candidate_path) and os.path.exists(target_path):
                     self.annotations[cls].append(ann)
-            # save all images for the class (reading the file directory)
-            for img_file in os.listdir(self.image_paths[cls]):
-                if img_file.endswith('.jpg'):
-                    self.images[cls].append(img_file.split(".")[0])  
+            # save all images for the class and split
+            img_file = os.path.join(annotations_path, f"split.{cls}.{self.split}.json")
+            with open(img_file, 'r') as f:
+                images_raw = json.load(f)
+            for img in images_raw:
+                img_path = self.get_image_path(cls, img)
+                if img not in missing_files and os.path.exists(img_path):
+                    self.images[cls].append(img)
 
         if self.mode == 'triplets':
             self.lengths = {cls: len(self.annotations[cls]) for cls in self.classes}
@@ -165,11 +173,11 @@ class FashionIQ(Dataset):
 
 
 def build_fashioniq_dataset(
-    split: str = 'val',
+    split: Literal['train', 'val'] = 'val',
     image_transform: Optional[Callable] = None,
     caption_transform: Optional[Callable] = None,
     max_length_tokenizer: int = 77,
-    mode = 'triplets',  # 'triplets' or 'images',
+    mode: Literal['triplets', 'images'] = 'triplets',  # 'triplets' or 'images',
 ):
     return FashionIQ(
         images_path="data/fashioniq/images",
