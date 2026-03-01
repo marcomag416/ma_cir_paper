@@ -8,7 +8,7 @@ import torch
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 
-from datasets.macir import build_macir_dataset
+from custom_datasets.macir import build_macir_dataset
 from models import TwoEncoderVLM
 from tqdm.auto import tqdm
 from contextlib import nullcontext

@@ -8,7 +8,7 @@ import os
 import matplotlib.pyplot as plt
 from pathlib import Path
 from tqdm.auto import tqdm
-from datasets.simat import SIMATDataset, build_simat_dataset
+from custom_datasets.simat import SIMATDataset, build_simat_dataset
 from models import TwoEncoderVLM
 from utils.decorators import timed_metric
 from utils.tensor import make_normalized

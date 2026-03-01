@@ -13,8 +13,9 @@ from losses import build_loss_fn
 from models import AutoModel, AutoTwoEncoderVLMConfig
 import argparse
 import json
-from datasets.mscoco import build_mscoco_dataset
-from datasets.laion2m import build_laion_dataset
+from custom_datasets.mscoco import build_mscoco_dataset
+from custom_datasets.laion2m import build_laion_dataset
+from custom_datasets.cc3m import build_cc3m_dataset
 from torch.optim import AdamW
 from utils.dict import prepend_key_to_dict
 
@@ -400,6 +401,17 @@ def main(args):
 		)
 		eval_dataset = build_laion_dataset(
 			split = "val",
+			image_transform=model.image_processor,
+			caption_transform=model.tokenizer,
+		)
+	elif dataset_name == "cc3m":
+		train_dataset = build_cc3m_dataset(
+			split="train",
+			image_transform=model.image_processor,
+			caption_transform=model.tokenizer,
+		)
+		eval_dataset = build_cc3m_dataset(
+			split="val",
 			image_transform=model.image_processor,
 			caption_transform=model.tokenizer,
 		)

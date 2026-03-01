@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from typing import Optional, Tuple
 from torch.utils.data import Dataset
 
-from datasets.cirr import build_cirr_dataset
+from custom_datasets.cirr import build_cirr_dataset
 from utils.decorators import timed_metric
 from utils.tensor import make_normalized
 from fusion import fusion

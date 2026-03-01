@@ -7,7 +7,7 @@ from typing import Optional, Tuple, List, Dict
 import os
 from PIL import Image
 
-from datasets.fashioniq import FashionIQ, build_fashioniq_dataset
+from custom_datasets.fashioniq import FashionIQ, build_fashioniq_dataset
 from models import TwoEncoderVLM
 from utils.decorators import timed_metric
 from utils.tensor import make_normalized

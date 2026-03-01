@@ -1,5 +1,5 @@
 from typing import Literal
-from datasets.mscoco import build_mscoco_dataset, MSCOCOCaptions
+from custom_datasets.mscoco import build_mscoco_dataset, MSCOCOCaptions
 import torch
 from evals.metrics import compute_statistic_metrics, compute_modality_gap_metrics, compute_sim_distributions
 from models import TwoEncoderVLM

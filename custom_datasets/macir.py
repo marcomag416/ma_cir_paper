@@ -12,7 +12,7 @@ import PIL.Image
 import torch
 from torch.utils.data import Dataset
 import numpy as np
-import datasets
+import custom_datasets
 
 from PIL import Image
 from PIL import ImageFile

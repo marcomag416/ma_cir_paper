@@ -12,7 +12,7 @@ import numpy as np
 import torch
 from tqdm.auto import tqdm
 
-from datasets.circo import CIRCODataset, build_circo_dataset
+from custom_datasets.circo import CIRCODataset, build_circo_dataset
 from fusion import fusion
 from models import TwoEncoderVLM
 from torch.utils.data import DataLoader
