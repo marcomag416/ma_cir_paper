@@ -50,7 +50,7 @@ class CC3Mdataset(Dataset):
     def __getitem__(self, idx):
         item = self.data[idx]
         img = item["jpg"]
-        caption = item["text"]
+        caption = item["txt"]
         id = item["__key__"]
 
         if self.image_transform is not None:
