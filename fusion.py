@@ -15,8 +15,8 @@ def fusion(
     Args:
         image_features (torch.Tensor): Tensor of shape (batch_size, feature_dim) representing image features.
         text_features (torch.Tensor): Tensor of shape (batch_size, feature_dim) representing text features.
-        fusion_type (str): Type of fusion to apply. Options are 'sum', 'slerp', 'cslerp'. cslerp is slerp with custom alpha.
-        alpha (float): Interpolation factor for slerp fusion. Ignored if fusion_type is not 'slerp'.
+        fusion_type (str): Type of fusion to apply. Options are 'sum', 'slerp', 'cslerp'. cslerp is slerp with custom alpha. slerp uses a fixed alpha of 0.8.
+        alpha (float): Interpolation factor for slerp fusion. Ignored if fusion_type is not 'cslerp'.
 
     Returns:
         torch.Tensor: Fused features tensor.
@@ -24,6 +24,8 @@ def fusion(
 
     image_features = make_normalized(image_features)
     text_features = make_normalized(text_features)
+
+    assert image_features.shape == text_features.shape, "Image and text features must have the same shape for fusion."
 
     if fusion_type == "sum":
         fused_features = image_features + text_features
