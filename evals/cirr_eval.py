@@ -471,6 +471,7 @@ def generate_cirr_test_submission(
         batch_size=batch_size,
         num_workers=num_workers,
         use_tqdm=tqdm,
+        skip_targets=True
     )
 
     predicted_features = fusion(
