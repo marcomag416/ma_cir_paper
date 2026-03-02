@@ -395,7 +395,7 @@ def generate_circo_test_submission(
         image_features=image_features,
         text_features=text_features,
         fusion_type=fusion_type,
-        alpha=0.8
+        alpha=0.5
     )
 
     if index_tuple is None:
