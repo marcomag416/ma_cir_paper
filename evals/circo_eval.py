@@ -94,54 +94,54 @@ def compute_metrics(relative_val_dataset: CIRCODataset, predictions_dict: Dict[i
 
     return map_atk, recall_atk, semantic_map_at10
 
-@torch.no_grad()
-def generate_circo_predictions(
-    clip_model :TwoEncoderVLM,
-    relative_dataset: CIRCODataset,
-    fusion_type: str,
-    batch_size: int = 64,
-    num_workers: int = 4,
-    use_tqdm: bool = False,
-    accelerator=None,
-) -> Dict[int, List[int]]:
-    dataloader = DataLoader(
-        relative_dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=num_workers,
-        pin_memory=True,
-    )
+# @torch.no_grad()
+# def generate_circo_predictions(
+#     clip_model :TwoEncoderVLM,
+#     relative_dataset: CIRCODataset,
+#     fusion_type: str,
+#     batch_size: int = 64,
+#     num_workers: int = 4,
+#     use_tqdm: bool = False,
+#     accelerator=None,
+# ) -> Dict[int, List[int]]:
+#     dataloader = DataLoader(
+#         relative_dataset,
+#         batch_size=batch_size,
+#         shuffle=False,
+#         num_workers=num_workers,
+#         pin_memory=True,
+#     )
 
-    all_predictions = []
-    all_query_ids = []
-    all_reference_ids = []
+#     all_predictions = []
+#     all_query_ids = []
+#     all_reference_ids = []
 
-    clip_model.eval()
-    vision_encoder = clip_model.vision
-    text_encoder = clip_model.text
+#     clip_model.eval()
+#     vision_encoder = clip_model.vision
+#     text_encoder = clip_model.text
 
-    for batch in tqdm(dataloader, disable=not use_tqdm, desc="Generating CIRCO predictions"):
-        reference_images = batch['reference_img'].to(vision_encoder.device)
-        input_ids = batch['input_ids'].to(text_encoder.device)
-        attention_mask = batch['attention_mask'].to(text_encoder.device)
-        query_ids = batch['query_id']
-        reference_id = batch['reference_imd_id']
+#     for batch in tqdm(dataloader, disable=not use_tqdm, desc="Generating CIRCO predictions"):
+#         reference_images = batch['reference_img'].to(vision_encoder.device)
+#         input_ids = batch['input_ids'].to(text_encoder.device)
+#         attention_mask = batch['attention_mask'].to(text_encoder.device)
+#         query_ids = batch['query_id']
+#         reference_id = batch['reference_imd_id']
 
-        image_features = vision_encoder(reference_images).image_embeds
-        text_features = text_encoder(input_ids=input_ids, attention_mask=attention_mask).text_embeds
+#         image_features = vision_encoder(reference_images).image_embeds
+#         text_features = text_encoder(input_ids=input_ids, attention_mask=attention_mask).text_embeds
 
-        predicted_features = fusion(
-            image_features=image_features,
-            text_features=text_features,
-            fusion_type=fusion_type
-        )
+#         predicted_features = fusion(
+#             image_features=image_features,
+#             text_features=text_features,
+#             fusion_type=fusion_type
+#         )
         
-        all_predictions.append(predicted_features)
-        all_query_ids.extend(query_ids)
-        all_reference_ids.extend(reference_id)
+#         all_predictions.append(predicted_features)
+#         all_query_ids.extend(query_ids)
+#         all_reference_ids.extend(reference_id)
 
-    all_predictions = torch.vstack(all_predictions)
-    return all_predictions, all_query_ids, all_reference_ids
+#     all_predictions = torch.vstack(all_predictions)
+#     return all_predictions, all_query_ids, all_reference_ids
 
 @torch.no_grad()
 def generate_circo_triplet_features(
@@ -286,14 +286,29 @@ def evaluate_circo(
             max_length_tokenizer=77,
         )
 
-    predicted_features, query_ids, reference_ids = generate_circo_predictions(
+    # predicted_features, query_ids, reference_ids = generate_circo_predictions(
+    #     model,
+    #     relative_dataset,
+    #     fusion_type,
+    #     batch_size,
+    #     num_workers,
+    #     tqdm,
+    #     accelerator
+    # )
+
+    image_features, text_features, query_ids, reference_ids = generate_circo_triplet_features(
         model,
         relative_dataset,
-        fusion_type,
-        batch_size,
-        num_workers,
-        tqdm,
-        accelerator
+        batch_size=batch_size,
+        num_workers=num_workers,
+        use_tqdm=tqdm,
+    )
+
+    predicted_features = fusion(
+        image_features=image_features,
+        text_features=text_features,
+        fusion_type=fusion_type,
+        alpha=0.5
     )
 
     if index_tuple is None:
@@ -359,14 +374,28 @@ def generate_circo_test_submission(
             max_length_tokenizer=77,
         )
 
-    predicted_features, query_ids, reference_ids = generate_circo_predictions(
+    # predicted_features, query_ids, reference_ids = generate_circo_predictions(
+    #     model,
+    #     relative_dataset,
+    #     fusion_type,
+    #     batch_size,
+    #     num_workers,
+    #     tqdm,
+    #     accelerator
+    # )
+    image_features, text_features, query_ids, reference_ids = generate_circo_triplet_features(
         model,
         relative_dataset,
-        fusion_type,
-        batch_size,
-        num_workers,
-        tqdm,
-        accelerator
+        batch_size=batch_size,
+        num_workers=num_workers,
+        use_tqdm=tqdm,
+    )
+
+    predicted_features = fusion(
+        image_features=image_features,
+        text_features=text_features,
+        fusion_type=fusion_type,
+        alpha=0.8
     )
 
     if index_tuple is None:

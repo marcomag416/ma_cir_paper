@@ -192,74 +192,74 @@ def generate_cirr_index_features(
 
     return all_image_features, all_image_names
 
-@torch.no_grad()
-def generate_cirr_predictions(
-    clip_model :TwoEncoderVLM,
-    triplet_dataset: Dataset,
-    fusion_type: str,
-    batch_size: int = 64,
-    num_workers: int = 4,
-    use_tqdm: bool = False,
-    accelerator=None,
-    skip_targets: bool = False
-):
-    dataloader = DataLoader(
-        triplet_dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=num_workers,
-        pin_memory=True,
-    )
-    all_predicted_features = []
-    all_reference_names = []
-    all_target_names = []
-    all_group_members = []
-    all_pair_ids = []
+# @torch.no_grad()
+# def generate_cirr_predictions(
+#     clip_model :TwoEncoderVLM,
+#     triplet_dataset: Dataset,
+#     fusion_type: str,
+#     batch_size: int = 64,
+#     num_workers: int = 4,
+#     use_tqdm: bool = False,
+#     accelerator=None,
+#     skip_targets: bool = False
+# ):
+#     dataloader = DataLoader(
+#         triplet_dataset,
+#         batch_size=batch_size,
+#         shuffle=False,
+#         num_workers=num_workers,
+#         pin_memory=True,
+#     )
+#     all_predicted_features = []
+#     all_reference_names = []
+#     all_target_names = []
+#     all_group_members = []
+#     all_pair_ids = []
 
-    clip_model.eval()
-    text_encoder = clip_model.text
-    vision_encoder = clip_model.vision
+#     clip_model.eval()
+#     text_encoder = clip_model.text
+#     vision_encoder = clip_model.vision
 
-    for batch in tqdm(dataloader, disable=not use_tqdm, desc="Generating CIRR predictions"):
-        reference_images = batch['reference'].to(vision_encoder.device)
-        reference_names = batch['reference_name']
-        group_members = batch['group_members']
-        pair_ids = batch['pair_id']
-        relative_captions = batch['transformed_caption'].to(text_encoder.device)
-        attention_masks = batch['attention_mask'].to(text_encoder.device)
+#     for batch in tqdm(dataloader, disable=not use_tqdm, desc="Generating CIRR predictions"):
+#         reference_images = batch['reference'].to(vision_encoder.device)
+#         reference_names = batch['reference_name']
+#         group_members = batch['group_members']
+#         pair_ids = batch['pair_id']
+#         relative_captions = batch['transformed_caption'].to(text_encoder.device)
+#         attention_masks = batch['attention_mask'].to(text_encoder.device)
 
-        if skip_targets:
-            target_names = []
-        else:
-            target_names = batch['target_name']
+#         if skip_targets:
+#             target_names = []
+#         else:
+#             target_names = batch['target_name']
 
-        # batch size is returned as (G, B) where G is the number of groups and B is the number of triplets per group
-        # we need to switch to (B, G) for proper processing
-        group_members_reshaped = []
-        for i in range(len(group_members[0])):
-            group_members_reshaped.append([group_members[j][i] for j in range(len(group_members))])
+#         # batch size is returned as (G, B) where G is the number of groups and B is the number of triplets per group
+#         # we need to switch to (B, G) for proper processing
+#         group_members_reshaped = []
+#         for i in range(len(group_members[0])):
+#             group_members_reshaped.append([group_members[j][i] for j in range(len(group_members))])
 
 
-        reference_features = vision_encoder(reference_images).image_embeds
-        caption_features = text_encoder(
-            input_ids=relative_captions,
-            attention_mask=attention_masks
-        ).text_embeds
+#         reference_features = vision_encoder(reference_images).image_embeds
+#         caption_features = text_encoder(
+#             input_ids=relative_captions,
+#             attention_mask=attention_masks
+#         ).text_embeds
 
-        predicted_features = fusion(
-            image_features=reference_features,
-            text_features=caption_features,
-            fusion_type=fusion_type
-        )
+#         predicted_features = fusion(
+#             image_features=reference_features,
+#             text_features=caption_features,
+#             fusion_type=fusion_type
+#         )
         
-        all_predicted_features.append(predicted_features)
-        all_reference_names.extend(reference_names)
-        all_target_names.extend(target_names)
-        all_group_members.extend(group_members_reshaped)
-        all_pair_ids.extend(pair_ids)
+#         all_predicted_features.append(predicted_features)
+#         all_reference_names.extend(reference_names)
+#         all_target_names.extend(target_names)
+#         all_group_members.extend(group_members_reshaped)
+#         all_pair_ids.extend(pair_ids)
 
-    all_predictions = torch.vstack(all_predicted_features)
-    return all_predictions, all_reference_names, all_target_names, all_group_members, all_pair_ids
+#     all_predictions = torch.vstack(all_predicted_features)
+#     return all_predictions, all_reference_names, all_target_names, all_group_members, all_pair_ids
 
 @torch.no_grad()
 def generate_cirr_triplet_features(
@@ -367,14 +367,29 @@ def evaluate_cirr(
     else:
         index_features, index_names = index_tuple
 
-    predicted_features, reference_names, target_names, group_members, pair_ids = generate_cirr_predictions(
+    # predicted_features, reference_names, target_names, group_members, pair_ids = generate_cirr_predictions(
+    #     clip_model=model,
+    #     triplet_dataset=cirr_triplets,
+    #     fusion_type=fusion_type,
+    #     batch_size=batch_size,
+    #     num_workers=num_workers,
+    #     use_tqdm=tqdm,
+    #     accelerator=accelerator
+    # )
+
+    image_features, text_features, reference_names, target_names, group_members, pair_ids = generate_cirr_triplet_features(
         clip_model=model,
         triplet_dataset=cirr_triplets,
-        fusion_type=fusion_type,
         batch_size=batch_size,
         num_workers=num_workers,
         use_tqdm=tqdm,
-        accelerator=accelerator
+    )
+
+    predicted_features = fusion(
+        image_features=image_features,
+        text_features=text_features,
+        fusion_type=fusion_type,
+        alpha=0.7
     )
 
     metrics = compute_cirr_metrics(
@@ -439,15 +454,30 @@ def generate_cirr_test_submission(
     else:
         index_features, index_names = index_tuple
 
-    predicted_features, reference_names, target_names, group_members, pair_ids = generate_cirr_predictions(
+    # predicted_features, reference_names, target_names, group_members, pair_ids = generate_cirr_predictions(
+    #     clip_model=model,
+    #     triplet_dataset=cirr_triplets,
+    #     fusion_type=fusion_type,
+    #     batch_size=batch_size,
+    #     num_workers=num_workers,
+    #     use_tqdm=tqdm,
+    #     accelerator=accelerator,
+    #     skip_targets=True
+    # )
+
+    image_features, text_features, reference_names, target_names, group_members, pair_ids = generate_cirr_triplet_features(
         clip_model=model,
         triplet_dataset=cirr_triplets,
-        fusion_type=fusion_type,
         batch_size=batch_size,
         num_workers=num_workers,
         use_tqdm=tqdm,
-        accelerator=accelerator,
-        skip_targets=True
+    )
+
+    predicted_features = fusion(
+        image_features=image_features,
+        text_features=text_features,
+        fusion_type=fusion_type,
+        alpha=0.7
     )
 
     submission = compute_cirr_metrics(

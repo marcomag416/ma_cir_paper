@@ -213,7 +213,7 @@ def evaluate_fashioniq(
         image_features=image_features,
         text_features=text_features,
         fusion_type=fusion_type,
-        alpha=0.8
+        alpha=0.6
     )
 
     metrics = compute_fashioniq_metrics(

@@ -276,69 +276,69 @@ def macir_compute_test_metrics(
 
         return metrics
 
-@torch.no_grad()
-def macir_generate_test_predictions(
-    clip_model: TwoEncoderVLM, 
-    query_test_dataset: Dataset, 
-    fusion_type: str, 
-    batch_size: int = 64, 
-    num_workers: int = 4, 
-    use_tqdm: bool = False,
-    accelerator = None
-):
-    pin_mem = (accelerator is None and torch.cuda.is_available())
-    dataloader = DataLoader(query_test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_mem)
+# @torch.no_grad()
+# def macir_generate_test_predictions(
+#     clip_model: TwoEncoderVLM, 
+#     query_test_dataset: Dataset, 
+#     fusion_type: str, 
+#     batch_size: int = 64, 
+#     num_workers: int = 4, 
+#     use_tqdm: bool = False,
+#     accelerator = None
+# ):
+#     pin_mem = (accelerator is None and torch.cuda.is_available())
+#     dataloader = DataLoader(query_test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_mem)
     
-    clip_model.eval()
-    vision_encoder = clip_model.vision
-    text_encoder = clip_model.text
+#     clip_model.eval()
+#     vision_encoder = clip_model.vision
+#     text_encoder = clip_model.text
 
-    if accelerator:
-        dataloader = accelerator.prepare(dataloader)
-        vision_encoder, text_encoder = accelerator.prepare(vision_encoder, text_encoder)
-        device_ctx = accelerator.autocast
-    else:
-        device_ctx = nullcontext
+#     if accelerator:
+#         dataloader = accelerator.prepare(dataloader)
+#         vision_encoder, text_encoder = accelerator.prepare(vision_encoder, text_encoder)
+#         device_ctx = accelerator.autocast
+#     else:
+#         device_ctx = nullcontext
 
-    all_predicted_features = []
-    all_reference_names = []
-    all_target_names = []
-    all_composition_types = []
-    all_condition_types = []
+#     all_predicted_features = []
+#     all_reference_names = []
+#     all_target_names = []
+#     all_composition_types = []
+#     all_condition_types = []
 
-    for batch in tqdm(dataloader, disable=not use_tqdm, desc="Generating MACIR test predictions"):
-        if accelerator:
-            reference_images = batch['reference_image']
-            relative_captions = batch['relative_caption']
-            attention_mask = batch['attention_mask']
-        else:
-            reference_images = batch['reference_image'].to(vision_encoder.device)
-            relative_captions = batch['relative_caption'].to(text_encoder.device)
-            attention_mask = batch['attention_mask'].to(text_encoder.device)
+#     for batch in tqdm(dataloader, disable=not use_tqdm, desc="Generating MACIR test predictions"):
+#         if accelerator:
+#             reference_images = batch['reference_image']
+#             relative_captions = batch['relative_caption']
+#             attention_mask = batch['attention_mask']
+#         else:
+#             reference_images = batch['reference_image'].to(vision_encoder.device)
+#             relative_captions = batch['relative_caption'].to(text_encoder.device)
+#             attention_mask = batch['attention_mask'].to(text_encoder.device)
 
-        reference_names = batch['reference_name']
-        target_names = batch['target_name']
-        composition_types = batch['composition_type']
-        condition_types = batch['condition_type']
+#         reference_names = batch['reference_name']
+#         target_names = batch['target_name']
+#         composition_types = batch['composition_type']
+#         condition_types = batch['condition_type']
 
-        with device_ctx():
-            image_features = vision_encoder(reference_images).image_embeds
-            text_features = text_encoder(input_ids=relative_captions, attention_mask=attention_mask).text_embeds
-            predicted_features = fusion(
-                image_features=image_features,
-                text_features=text_features,
-                fusion_type=fusion_type
-            )
+#         with device_ctx():
+#             image_features = vision_encoder(reference_images).image_embeds
+#             text_features = text_encoder(input_ids=relative_captions, attention_mask=attention_mask).text_embeds
+#             predicted_features = fusion(
+#                 image_features=image_features,
+#                 text_features=text_features,
+#                 fusion_type=fusion_type
+#             )
         
-        all_predicted_features.append(predicted_features)
-        all_reference_names.extend(reference_names)
-        all_target_names.extend(target_names)
-        all_composition_types.extend(composition_types)
-        all_condition_types.extend(condition_types)
+#         all_predicted_features.append(predicted_features)
+#         all_reference_names.extend(reference_names)
+#         all_target_names.extend(target_names)
+#         all_composition_types.extend(composition_types)
+#         all_condition_types.extend(condition_types)
 
-    all_predicted_features = torch.vstack(all_predicted_features)
+#     all_predicted_features = torch.vstack(all_predicted_features)
 
-    return (all_predicted_features, all_reference_names, all_target_names, all_composition_types, all_condition_types)  
+#     return (all_predicted_features, all_reference_names, all_target_names, all_composition_types, all_condition_types)  
 
 @torch.no_grad()
 def macir_generate_triplet_features(
@@ -487,15 +487,26 @@ def evaluate_macir(
         accelerator=accelerator
     )
 
-    predicted_features, reference_names, target_names, composition_types, condition_types = macir_generate_test_predictions(
+    # predicted_features, reference_names, target_names, composition_types, condition_types = macir_generate_test_predictions(
+    #     clip_model=model,
+    #     query_test_dataset=ma_cir_query,
+    #     fusion_type=fusion_type,
+    #     batch_size=batch_size,
+    #     num_workers=num_workers,
+    #     use_tqdm=tqdm,
+    #     accelerator=accelerator
+    # )
+
+    image_features, text_features, reference_names, target_names, composition_types, condition_types = macir_generate_triplet_features(
         clip_model=model,
         query_test_dataset=ma_cir_query,
-        fusion_type=fusion_type,
         batch_size=batch_size,
         num_workers=num_workers,
         use_tqdm=tqdm,
-        accelerator=accelerator
     )
+
+    predicted_features = fusion(image_features, text_features, fusion_type=fusion_type, alpha=0.6)
+
     metrics = macir_compute_test_metrics(
         predicted_features=predicted_features,
         reference_names=reference_names,

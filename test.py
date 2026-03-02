@@ -92,6 +92,17 @@ def test_model(
             accelerator=None
         )
         metrics.update(prepend_key_to_dict("macir_", ma_cir_metrics))
+        ma_cir_metrics = evaluate_macir(
+            model=model,
+            eval_level="full",
+            split="",
+            batch_size=batch_size,
+            num_workers=num_workers,
+            tqdm=tqdm,
+            fusion_type=fusion_type,
+            accelerator=None
+        )
+        metrics.update(prepend_key_to_dict("macir_", ma_cir_metrics))
 
     if "mscoco" not in skip_metrics:
         mscoco_metrics, mscoco_sim_distributions = eval_mscoco(
