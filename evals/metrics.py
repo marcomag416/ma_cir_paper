@@ -64,7 +64,7 @@ def compute_statistic_metrics(image_features, text_features):
 
     return metrics
 
-def generate_derangement(N) -> torch.Tensor:
+def generate_derangement(N, seed: int = 42) -> torch.Tensor:
     """
     Generate a derangement of size N (Indices in [0, 1, ..., N-1]).
     A derangement is a permutation where no element appears in its original position.
@@ -74,12 +74,14 @@ def generate_derangement(N) -> torch.Tensor:
     """
     if N < 2:
         raise ValueError("Size must be at least 2 to create a derangement.")
+    
+    generator = torch.Generator().manual_seed(seed)
 
     # we use a simple rejection sampling strategy
     # the dearangement is found with probability ~ 1/e for large N. This means that on average we need e ~ 2.718 attempts.
-    indices = torch.randperm(N)
+    indices = torch.randperm(N, generator=generator)
     while (indices == torch.arange(N)).any():
-        indices = torch.randperm(N)
+        indices = torch.randperm(N, generator=generator)
   
     return indices
 
@@ -94,6 +96,7 @@ def compute_sim_distributions(
     Args:
         image_features (torch.Tensor): Image features of shape (N, D).
         text_features (torch.Tensor): Text features of shape (N, D).
+        seed (int): Random seed for generating derangements.
     Returns:
         tuple: A tuple containing:
             - pos_sims (torch.Tensor): Similarities of positive pairs.
@@ -105,7 +108,7 @@ def compute_sim_distributions(
 
     image_to_text_sim = image_features @ text_features.t()
 
-    rnd_index = generate_derangement(image_features.shape[0])
+    rnd_index = generate_derangement(image_features.shape[0], seed=seed)
 
     pos_sims = torch.diag(image_to_text_sim)
     rnd_sims = image_to_text_sim[torch.arange(image_features.shape[0]), rnd_index]
