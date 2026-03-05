@@ -3,7 +3,7 @@
 from copy import copy
 from os import PathLike
 from typing import Literal
-from transformers import CLIPTextModelWithProjection, CLIPVisionModelWithProjection, CLIPImageProcessor, CLIPTokenizer, PreTrainedModel, PretrainedConfig, AutoConfig, AutoModel
+from transformers import Blip2TextModelWithProjection, Blip2VisionModelWithProjection, CLIPTextModelWithProjection, CLIPVisionModelWithProjection, CLIPImageProcessor, CLIPTokenizer, PreTrainedModel, PretrainedConfig, AutoConfig, AutoModel, AutoProcessor
 from peft import LoraConfig, get_peft_model, PeftModel
 
 import torch
@@ -45,6 +45,41 @@ def build_clip(
     tokenizer.add_special_tokens({'additional_special_tokens':["[$]"]}) # NOTE: 49408
 
     return clip_vision_model, clip_preprocess, clip_text_model, tokenizer
+
+def build_blip2(
+        blip2_model_name: Literal['L', 'S', 'ITM_G'] = 'ITM_G',
+        mixed_precision: Literal['fp16', 'fp32'] = 'fp32',
+        cache_dir: str = ".cache",
+):
+    blip2_model_dict = {
+        'L': 'Salesforce/blip2-opt-2.7b',
+        'S': 'Salesforce/blip2-opt-6.7b',
+        'ITM_G': 'Salesforce/blip2-itm-vit-g'
+    }
+
+    print(f"Building BLIP-2 model: {blip2_model_dict[blip2_model_name]}")
+
+    blip2_text_model = Blip2TextModelWithProjection.from_pretrained(
+        blip2_model_dict[blip2_model_name], 
+        dtype=torch.float16 if mixed_precision == 'fp16' else torch.float32, 
+        cache_dir=cache_dir
+    )
+
+    blip2_vision_model = Blip2VisionModelWithProjection.from_pretrained(
+        blip2_model_dict[blip2_model_name], 
+        dtype=torch.float16 if mixed_precision == 'fp16' else torch.float32, 
+        cache_dir=cache_dir
+    )
+
+    processor = AutoProcessor.from_pretrained(blip2_model_dict[blip2_model_name], cache_dir=cache_dir)
+
+    def blip2_text_processor(texts, **kwargs):
+        return processor(text=texts, **kwargs)
+    
+    def blip2_image_processor(images, **kwargs):
+        return processor(images=images, **kwargs)
+    
+    return blip2_vision_model, blip2_image_processor, blip2_text_model, blip2_text_processor
 
 class TwoEncoderVLMConfig(PretrainedConfig):
     model_type = "two_encoder_vlm"
@@ -155,7 +190,7 @@ class AutoTwoEncoderVLMConfig(TwoEncoderVLMConfig):
 
     def __init__(
             self, 
-            model_name: Literal['CLIP_B32', 'CLIP_B16', 'CLIP_L', 'CLIP_H', 'CLIP_G', 'CLIP_meta-large', 'CLIP_meta-huge'] = 'CLIP_B32',
+            model_name: Literal['CLIP_B32', 'CLIP_B16', 'CLIP_L', 'CLIP_H', 'CLIP_G', 'CLIP_meta-large', 'CLIP_meta-huge', 'BLIP2_L', 'BLIP2_S', 'BLIP2_ITM_G'] = 'CLIP_B32',
             mixed_precision: Literal['fp16', 'fp32'] = 'fp32',
             cache_dir: str = ".cache",
             **kwargs
@@ -179,6 +214,15 @@ class AutoTwoEncoderVLM(TwoEncoderVLM):
                 mixed_precision=config.mixed_precision,
                 cache_dir=config.cache_dir
             )
+        elif model_name.startswith("BLIP2_"):
+            blip2_model_name = model_name.replace("BLIP2_", "")
+            vision_model, image_processor, text_model, tokenizer = build_blip2(
+                blip2_model_name=blip2_model_name,
+                mixed_precision=config.mixed_precision,
+                cache_dir=config.cache_dir
+            )
+        else:
+            raise ValueError(f"Unsupported model name: {model_name}")
         super().__init__(config, vision_model, text_model, image_processor=image_processor, tokenizer=tokenizer)
         self.config = config
 
