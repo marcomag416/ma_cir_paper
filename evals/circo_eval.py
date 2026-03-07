@@ -463,7 +463,7 @@ def circo_test_alpha(
 
     scores_alpha = {}
     for alpha in alphas:
-        predicted_features = fusion(circo_image_features, circo_text_features, fusion_type="slerp", alpha=alpha)
+        predicted_features = fusion(circo_image_features, circo_text_features, fusion_type="cslerp", alpha=alpha)
         circo_predictions_dict = compute_prediction_dict(
             predicted_features,
             circo_query_ids,

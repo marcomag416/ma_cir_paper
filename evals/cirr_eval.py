@@ -543,7 +543,7 @@ def cirr_test_alpha(
         predicted_features = fusion(
             image_features=image_features,
             text_features=text_features,
-            fusion_type="slerp",
+            fusion_type="cslerp",
             alpha=alpha
         )
         metrics = compute_cirr_metrics(

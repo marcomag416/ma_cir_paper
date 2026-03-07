@@ -561,7 +561,7 @@ def macir_test_alpha(
 
     alpha_scores = {}
     for alpha in alphas:
-        predicted_features = fusion(image_features, text_features, fusion_type="slerp", alpha=alpha)
+        predicted_features = fusion(image_features, text_features, fusion_type="cslerp", alpha=alpha)
         metrics = macir_compute_test_metrics(
             predicted_features=predicted_features,
             reference_names=reference_names,
