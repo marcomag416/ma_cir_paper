@@ -111,8 +111,8 @@ class CIRR(Dataset):
                     'pair_id': pair_id,
                     'reference_name': reference_name,
                     'reference': reference,
-                    'transformed_caption': transformed_caption["input_ids"][0],
-                    'attention_mask': transformed_caption["attention_mask"][0],
+                    'transformed_caption': transformed_caption["input_ids"][0] if self.caption_transform is not None else transformed_caption,
+                    'attention_mask': transformed_caption["attention_mask"][0] if self.caption_transform is not None else None,
                     'caption': caption,
                     'group_members': group_members
                 }
@@ -123,8 +123,8 @@ class CIRR(Dataset):
                 'reference': reference,
                 'target': target,
                 'target_name': target_name,
-                'transformed_caption': transformed_caption["input_ids"][0],
-                'attention_mask': transformed_caption["attention_mask"][0],
+                'transformed_caption': transformed_caption["input_ids"][0] if self.caption_transform is not None else transformed_caption,
+                'attention_mask': transformed_caption["attention_mask"][0] if self.caption_transform is not None else None,
                 'caption': caption,
                 'group_members': group_members,
             }

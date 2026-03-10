@@ -113,8 +113,8 @@ class MSCOCOCaptions(Dataset):
 
         return {
             'pixel_values': img,
-            'input_ids': transformed_captions["input_ids"],
-            'attention_mask': transformed_captions["attention_mask"],
+            'input_ids': transformed_captions["input_ids"] if self.caption_transform is not None else transformed_captions,
+            'attention_mask': transformed_captions["attention_mask"] if self.caption_transform is not None else None,
             'labels': img_id,
         }
 
