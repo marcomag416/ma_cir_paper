@@ -3,7 +3,10 @@
 from copy import copy
 from os import PathLike
 from typing import Literal
-from transformers import Blip2TextModelWithProjection, Blip2VisionModelWithProjection, CLIPTextModelWithProjection, CLIPVisionModelWithProjection, CLIPImageProcessor, CLIPTokenizer, PreTrainedModel, PretrainedConfig, AutoConfig, AutoModel, AutoProcessor
+from transformers import  CLIPTextModelWithProjection, CLIPVisionModelWithProjection, CLIPImageProcessor, CLIPTokenizer, PreTrainedModel, PretrainedConfig, AutoConfig, AutoModel, AutoProcessor
+from dataclasses import dataclass
+from transformers.modeling_outputs import BaseModelOutputWithPooling
+from transformers import BlipForImageTextRetrieval
 from peft import LoraConfig, get_peft_model, PeftModel
 
 import torch
@@ -46,40 +49,71 @@ def build_clip(
 
     return clip_vision_model, clip_preprocess, clip_text_model, tokenizer
 
-def build_blip2(
-        blip2_model_name: Literal['L', 'S', 'ITM_G'] = 'ITM_G',
+@dataclass
+class BLIPTextModelOutput(BaseModelOutputWithPooling):
+    text_embeds: torch.FloatTensor = None
+
+@dataclass
+class BLIPVisionModelOutput(BaseModelOutputWithPooling):
+    image_embeds: torch.FloatTensor = None
+
+class BLIPVisionModelWithProjection(PreTrainedModel):
+    def __init__(self, vision_model, vision_projection):
+        super().__init__(PretrainedConfig())
+        self.vision_model = vision_model
+        self.vision_projection = vision_projection
+
+    def forward(self, pixel_values, **kwargs):
+        vision_output = self.vision_model(pixel_values=pixel_values, **kwargs)
+        pooled_output = vision_output.last_hidden_state[:, 0, :]
+        image_embeds = self.vision_projection(pooled_output)
+        return BLIPVisionModelOutput(
+            image_embeds=image_embeds,
+            **vision_output
+        )
+    
+class BLIPTextModelWithProjection(PreTrainedModel):
+    def __init__(self, text_model, text_projection):
+        super().__init__(PretrainedConfig())
+        self.text_model = text_model
+        self.text_projection = text_projection
+
+    def forward(self, input_ids, attention_mask=None, **kwargs):
+        text_output = self.text_model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
+        pooled_output = text_output.last_hidden_state[:, 0, :]
+        text_embeds = self.text_projection(pooled_output)
+        return BLIPTextModelOutput(
+            text_embeds=text_embeds,
+            **text_output
+        )
+
+def build_blip(
+        blip_model_name: Literal["L-coco", "L-flickr"] = "L-coco",
         mixed_precision: Literal['fp16', 'fp32'] = 'fp32',
         cache_dir: str = ".cache",
 ):
-    blip2_model_dict = {
-        'L': 'Salesforce/blip2-opt-2.7b',
-        'S': 'Salesforce/blip2-opt-6.7b',
-        'ITM_G': 'Salesforce/blip2-itm-vit-g'
+    blip_model_dict = {
+        "L-coco": "Salesforce/blip-itm-large-coco",
+        "L-flickr": "Salesforce/blip-itm-large-flickr"
     }
 
-    print(f"Building BLIP-2 model: {blip2_model_dict[blip2_model_name]}")
+    print(f"Building BLIP model: {blip_model_dict[blip_model_name]}")
 
-    blip2_text_model = Blip2TextModelWithProjection.from_pretrained(
-        blip2_model_dict[blip2_model_name], 
-        dtype=torch.float16 if mixed_precision == 'fp16' else torch.float32, 
-        cache_dir=cache_dir
-    )
+    full_model = BlipForImageTextRetrieval.from_pretrained(blip_model_dict[blip_model_name], dtype=torch.float16 if mixed_precision == 'fp16' else torch.float32, cache_dir=cache_dir)
 
-    blip2_vision_model = Blip2VisionModelWithProjection.from_pretrained(
-        blip2_model_dict[blip2_model_name], 
-        dtype=torch.float16 if mixed_precision == 'fp16' else torch.float32, 
-        cache_dir=cache_dir
-    )
+    processor = AutoProcessor.from_pretrained(blip_model_dict[blip_model_name], cache_dir=cache_dir)
 
-    processor = AutoProcessor.from_pretrained(blip2_model_dict[blip2_model_name], cache_dir=cache_dir)
+    vision_encoder = BLIPVisionModelWithProjection(full_model.vision_model, full_model.vision_proj)
+    text_encoder = BLIPTextModelWithProjection(full_model.text_encoder, full_model.text_proj)
 
-    def blip2_text_processor(texts, **kwargs):
-        return processor(text=texts, **kwargs)
+    def tokenizer(text, **kwargs):
+        return processor(text=text, **kwargs)
+
+    def image_processor(image, **kwargs):
+        return processor(images=image, **kwargs)
     
-    def blip2_image_processor(images, **kwargs):
-        return processor(images=images, **kwargs)
+    return vision_encoder, image_processor, text_encoder, tokenizer
     
-    return blip2_vision_model, blip2_image_processor, blip2_text_model, blip2_text_processor
 
 class TwoEncoderVLMConfig(PretrainedConfig):
     model_type = "two_encoder_vlm"
@@ -171,7 +205,10 @@ class TwoEncoderVLM(PreTrainedModel):
         if lora_config.task_type is None:
             lora_config.task_type = "FEATURE_EXTRACTION"
 
-        lora_config.target_modules = rf"({self.unfrozen_modules_prefix}).*(q_proj|k_proj|v_proj|out_proj|fc1|fc2|text_projection|visual_projection|position_embedding|token_embedding|patch_embedding)"    
+        CLIP_MODULES_NAMES = "q_proj|k_proj|v_proj|out_proj|fc1|fc2|text_projection|visual_projection|position_embedding|token_embedding|patch_embedding"
+        BLIP_MODULES_NAMES = "patch_embedding|qkv|projection|fc1|fc2|vision_projection|word_embeddings|position_embeddings|query|key|value|dense|text_projection"
+
+        lora_config.target_modules = rf"({self.unfrozen_modules_prefix}).*({CLIP_MODULES_NAMES}|{BLIP_MODULES_NAMES})"    
 
         model_peft = get_peft_model(self, lora_config, adapter_name=adapter_name)
         return model_peft
@@ -190,7 +227,7 @@ class AutoTwoEncoderVLMConfig(TwoEncoderVLMConfig):
 
     def __init__(
             self, 
-            model_name: Literal['CLIP_B32', 'CLIP_B16', 'CLIP_L', 'CLIP_H', 'CLIP_G', 'CLIP_meta-large', 'CLIP_meta-huge', 'BLIP2_L', 'BLIP2_S', 'BLIP2_ITM_G'] = 'CLIP_B32',
+            model_name: Literal['CLIP_B32', 'CLIP_B16', 'CLIP_L', 'CLIP_H', 'CLIP_G', 'CLIP_meta-large', 'CLIP_meta-huge', 'BLIP_L-coco', 'BLIP_L-flickr'] = 'CLIP_B32',
             mixed_precision: Literal['fp16', 'fp32'] = 'fp32',
             cache_dir: str = ".cache",
             **kwargs
@@ -214,10 +251,10 @@ class AutoTwoEncoderVLM(TwoEncoderVLM):
                 mixed_precision=config.mixed_precision,
                 cache_dir=config.cache_dir
             )
-        elif model_name.startswith("BLIP2_"):
-            blip2_model_name = model_name.replace("BLIP2_", "")
-            vision_model, image_processor, text_model, tokenizer = build_blip2(
-                blip2_model_name=blip2_model_name,
+        elif model_name.startswith("BLIP_"):
+            blip_model_name = model_name.replace("BLIP_", "")
+            vision_model, image_processor, text_model, tokenizer = build_blip(
+                blip_model_name=blip_model_name,
                 mixed_precision=config.mixed_precision,
                 cache_dir=config.cache_dir
             )
