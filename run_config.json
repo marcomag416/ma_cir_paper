@@ -535,26 +535,6 @@
     "lora_rank": 16
     },
     {
-    "name": "unslerp_q2i_sw_blip2_itm_g_mscoco_lora_t10_th_freeproj",
-    "model_name": "BLIP2_ITM_G",
-    "loss": "unslerp_q2i_sw",
-    "dataset": "mscoco",
-    "logit_scale": 10,
-    "learnable_temperature": true,
-    "lr": 1e-6,
-    "scheduler": "none",
-    "batch_size": 32,
-    "num_epochs": 5,
-    "weight_decay": 0.1,
-    "warmup_ratio": 0.0,
-    "use_lora": true,
-    "adapter_type": "no_proj",
-    "encoder_to_freeze": "none",
-    "lora_alpha": 16,
-    "lora_dropout": 0.1,
-    "lora_rank": 16
-    },
-    {
     "name": "unslerp_q2i_sw_clip_L_mscoco_lora_t10_th_freeproj",
     "model_name": "CLIP_L",
     "loss": "unslerp_q2i_sw",
@@ -634,8 +614,115 @@
     "lora_alpha": 16,
     "lora_dropout": 0.1,
     "lora_rank": 16
+    },
+    {
+    "name": "unslerp_q2i_sw_BLIP_B-coco_mscoco_lora_t10_th_freeproj",
+    "model_name": "BLIP_B-coco",
+    "loss": "unslerp_q2i_sw",
+    "dataset": "mscoco",
+    "logit_scale": 10,
+    "learnable_temperature": true,
+    "lr": 1e-6,
+    "scheduler": "none",
+    "batch_size": 64,
+    "num_epochs": 5,
+    "weight_decay": 0.1,
+    "warmup_ratio": 0.0,
+    "use_lora": true,
+    "adapter_type": "no_proj",
+    "encoder_to_freeze": "none",
+    "lora_alpha": 16,
+    "lora_dropout": 0.1,
+    "lora_rank": 16
+    },
+    {
+    "name": "unslerp_q2i_sw_BLIP_L-coco_mscoco_lora_t10_th_freeproj",
+    "model_name": "BLIP_L-coco",
+    "loss": "unslerp_q2i_sw",
+    "dataset": "mscoco",
+    "logit_scale": 10,
+    "learnable_temperature": true,
+    "lr": 1e-6,
+    "scheduler": "none",
+    "batch_size": 64,
+    "num_epochs": 5,
+    "weight_decay": 0.1,
+    "warmup_ratio": 0.0,
+    "use_lora": true,
+    "adapter_type": "no_proj",
+    "encoder_to_freeze": "none",
+    "lora_alpha": 16,
+    "lora_dropout": 0.1,
+    "lora_rank": 16
+    },
+    {
+    "name": "unslerp_q2i_sw_BLIP_L-coco_mscoco_lora_t10_th_freeproj_batch32",
+    "model_name": "BLIP_L-coco",
+    "loss": "unslerp_q2i_sw",
+    "dataset": "mscoco",
+    "logit_scale": 10,
+    "learnable_temperature": true,
+    "lr": 1e-6,
+    "scheduler": "none",
+    "batch_size": 32,
+    "num_epochs": 5,
+    "weight_decay": 0.1,
+    "warmup_ratio": 0.0,
+    "use_lora": true,
+    "adapter_type": "no_proj",
+    "encoder_to_freeze": "none",
+    "lora_alpha": 16,
+    "lora_dropout": 0.1,
+    "lora_rank": 16
+    },
+    {
+    "name": "unslerp_q2i_sw_BLIP_L-coco_mscoco_lora_t10_th_freeproj_batch24",
+    "model_name": "BLIP_L-coco",
+    "loss": "unslerp_q2i_sw",
+    "dataset": "mscoco",
+    "logit_scale": 10,
+    "learnable_temperature": true,
+    "lr": 1e-6,
+    "scheduler": "none",
+    "batch_size": 24,
+    "num_epochs": 5,
+    "weight_decay": 0.1,
+    "warmup_ratio": 0.0,
+    "use_lora": true,
+    "adapter_type": "no_proj",
+    "encoder_to_freeze": "none",
+    "lora_alpha": 16,
+    "lora_dropout": 0.1,
+    "lora_rank": 16
+    },
+    {
+    "name": "unslerp_q2i_sw_BLIP_L-coco_mscoco_lora_t10_th_freeproj_batch32_fp16",
+    "model_name": "BLIP_L-coco",
+    "loss": "unslerp_q2i_sw",
+    "dataset": "mscoco",
+    "logit_scale": 10,
+    "learnable_temperature": true,
+    "lr": 1e-6,
+    "scheduler": "none",
+    "batch_size": 32,
+    "num_epochs": 5,
+    "weight_decay": 0.1,
+    "warmup_ratio": 0.0,
+    "use_lora": true,
+    "adapter_type": "no_proj",
+    "encoder_to_freeze": "none",
+    "lora_alpha": 16,
+    "lora_dropout": 0.1,
+    "lora_rank": 16,
+    "fp16": true
+    },
+
+
+
+
+
+
+    {
+        "name": "placeholder"
     }
-
-
-
 ]
