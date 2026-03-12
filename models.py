@@ -94,7 +94,9 @@ def build_blip(
 ):
     blip_model_dict = {
         "L-coco": "Salesforce/blip-itm-large-coco",
-        "L-flickr": "Salesforce/blip-itm-large-flickr"
+        "L-flickr": "Salesforce/blip-itm-large-flickr",
+        "B-coco": "Salesforce/blip-itm-base-coco",
+        "B-flickr": "Salesforce/blip-itm-base-flickr",
     }
 
     print(f"Building BLIP model: {blip_model_dict[blip_model_name]}")
@@ -227,7 +229,7 @@ class AutoTwoEncoderVLMConfig(TwoEncoderVLMConfig):
 
     def __init__(
             self, 
-            model_name: Literal['CLIP_B32', 'CLIP_B16', 'CLIP_L', 'CLIP_H', 'CLIP_G', 'CLIP_meta-large', 'CLIP_meta-huge', 'BLIP_L-coco', 'BLIP_L-flickr'] = 'CLIP_B32',
+            model_name: Literal['CLIP_B32', 'CLIP_B16', 'CLIP_L', 'CLIP_H', 'CLIP_G', 'CLIP_meta-large', 'CLIP_meta-huge', 'BLIP_L-coco', 'BLIP_L-flickr', 'BLIP_B-coco', 'BLIP_B-flickr'] = 'CLIP_B32',
             mixed_precision: Literal['fp16', 'fp32'] = 'fp32',
             cache_dir: str = ".cache",
             **kwargs
