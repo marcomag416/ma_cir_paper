@@ -290,7 +290,7 @@ def train(args):
 		remove_unused_columns =False,
 		dataloader_num_workers=get("num_workers", 4),
 		disable_tqdm=not get("tqdm", False),
-		eval_on_start=True,
+		eval_on_start=not get("no_eval_on_start", False),
 		
 		# CRITICAL: ensure this is False so our prediction_step runs fully
 		prediction_loss_only=False, 
@@ -347,6 +347,7 @@ def main(args):
 	run_config["tqdm"] = args.tqdm
 	run_config["save_strategy"] = args.save_strategy
 	run_config["save_steps"] = args.save_steps
+	run_config["no_eval_on_start"] = args.no_eval_on_start
 
 	model_name = run_config.get("model_name")
 	trainable_temp = run_config.get("learnable_temperature", False)
@@ -457,5 +458,6 @@ if __name__ == "__main__":
     parser.add_argument("--tqdm", action="store_true", help="Enable tqdm progress bars.", dest="tqdm")
     parser.add_argument("--save_strategy", type=str, default="epoch", help="Save strategy for checkpoints [epoch, steps].", dest="save_strategy")
     parser.add_argument("--save_steps", type=int, default=500, help="Number of steps between saving checkpoints.", dest="save_steps")
+    parser.add_argument("--no_eval_on_start", action="store_true", help="Skip evaluation step on start", dest="no_eval_on_start")
     args = parser.parse_args()
     main(args)
