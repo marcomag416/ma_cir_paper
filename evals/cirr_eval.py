@@ -1,4 +1,6 @@
 
+import random
+
 import numpy as np
 import torch
 
@@ -6,7 +8,7 @@ from evals import metrics
 from models import TwoEncoderVLM
 from tqdm.auto import tqdm
 from torch.utils.data import DataLoader
-from typing import Optional, Tuple
+from typing import Literal, Optional, Tuple
 from torch.utils.data import Dataset
 
 from custom_datasets.cirr import build_cirr_dataset
@@ -156,6 +158,48 @@ def compute_cirr_metrics(
 
     return output
     
+def compute_cirr_sim_distributions(
+    index_features: torch.Tensor,
+    index_names: list,
+    predicted_features: torch.Tensor,
+    reference_names: list,
+    target_names: list,
+    random_seed: int = 42
+):
+    """
+    Compute similarity distributions for true and random targets.
+    Args:
+        index_features (torch.Tensor): Index features of shape (M, D).
+        index_names (list): Names of the index images.
+        predicted_features (torch.Tensor): Predicted features of shape (N, D).
+        reference_names (list): Names of the reference images.
+        target_names (list): Names of the target images.
+        random_seed (int): Seed for random number generation.
+    Returns:
+        dict: Dictionary containing similarity distributions for true and random targets. Keys are 'true_trgt_sims' and 'rnd_trgt_sims'.
+    """
+    index_name_to_idx = {name: i for i, name in enumerate(index_names)}
+    true_trgt_features = index_features[[index_name_to_idx[name] for name in target_names], :]  # (N, D)
+
+    true_trgt_sims = torch.sum(predicted_features * true_trgt_features, dim=-1).cpu()  # (N,)
+
+    rnd_trgts = []
+    random.seed(random_seed)
+    for i in range(predicted_features.shape[0]):
+        excluded_names = set([reference_names[i], target_names[i]])
+        while(True):
+            rnd_target_name = index_names[random.randint(0, len(index_names)-1)]
+            if rnd_target_name not in excluded_names:
+                break
+        rnd_trgts.append(rnd_target_name)
+    
+    rnd_trgt_features = index_features[[index_name_to_idx[name] for name in rnd_trgts], :]  # (N, D)
+    rnd_trgt_sims = torch.sum(predicted_features * rnd_trgt_features, dim=-1).cpu()  # (N,)
+
+    return {
+        "true_trgt_sims": true_trgt_sims,
+        "rnd_trgt_sims": rnd_trgt_sims,
+    }
 
 @torch.no_grad()
 def generate_cirr_index_features(
@@ -192,74 +236,6 @@ def generate_cirr_index_features(
 
     return all_image_features, all_image_names
 
-# @torch.no_grad()
-# def generate_cirr_predictions(
-#     clip_model :TwoEncoderVLM,
-#     triplet_dataset: Dataset,
-#     fusion_type: str,
-#     batch_size: int = 64,
-#     num_workers: int = 4,
-#     use_tqdm: bool = False,
-#     accelerator=None,
-#     skip_targets: bool = False
-# ):
-#     dataloader = DataLoader(
-#         triplet_dataset,
-#         batch_size=batch_size,
-#         shuffle=False,
-#         num_workers=num_workers,
-#         pin_memory=True,
-#     )
-#     all_predicted_features = []
-#     all_reference_names = []
-#     all_target_names = []
-#     all_group_members = []
-#     all_pair_ids = []
-
-#     clip_model.eval()
-#     text_encoder = clip_model.text
-#     vision_encoder = clip_model.vision
-
-#     for batch in tqdm(dataloader, disable=not use_tqdm, desc="Generating CIRR predictions"):
-#         reference_images = batch['reference'].to(vision_encoder.device)
-#         reference_names = batch['reference_name']
-#         group_members = batch['group_members']
-#         pair_ids = batch['pair_id']
-#         relative_captions = batch['transformed_caption'].to(text_encoder.device)
-#         attention_masks = batch['attention_mask'].to(text_encoder.device)
-
-#         if skip_targets:
-#             target_names = []
-#         else:
-#             target_names = batch['target_name']
-
-#         # batch size is returned as (G, B) where G is the number of groups and B is the number of triplets per group
-#         # we need to switch to (B, G) for proper processing
-#         group_members_reshaped = []
-#         for i in range(len(group_members[0])):
-#             group_members_reshaped.append([group_members[j][i] for j in range(len(group_members))])
-
-
-#         reference_features = vision_encoder(reference_images).image_embeds
-#         caption_features = text_encoder(
-#             input_ids=relative_captions,
-#             attention_mask=attention_masks
-#         ).text_embeds
-
-#         predicted_features = fusion(
-#             image_features=reference_features,
-#             text_features=caption_features,
-#             fusion_type=fusion_type
-#         )
-        
-#         all_predicted_features.append(predicted_features)
-#         all_reference_names.extend(reference_names)
-#         all_target_names.extend(target_names)
-#         all_group_members.extend(group_members_reshaped)
-#         all_pair_ids.extend(pair_ids)
-
-#     all_predictions = torch.vstack(all_predicted_features)
-#     return all_predictions, all_reference_names, all_target_names, all_group_members, all_pair_ids
 
 @torch.no_grad()
 def generate_cirr_triplet_features(
@@ -337,6 +313,7 @@ def evaluate_cirr(
     skip_subset_metrics: bool = False,
     index_tuple: Tuple[torch.Tensor, list[int]] = None,
     return_index_tuple: bool = False,
+    return_distributions: bool = False,
 ):
     if index_tuple is None:
         cirr_index = build_cirr_dataset(
@@ -367,16 +344,6 @@ def evaluate_cirr(
     else:
         index_features, index_names = index_tuple
 
-    # predicted_features, reference_names, target_names, group_members, pair_ids = generate_cirr_predictions(
-    #     clip_model=model,
-    #     triplet_dataset=cirr_triplets,
-    #     fusion_type=fusion_type,
-    #     batch_size=batch_size,
-    #     num_workers=num_workers,
-    #     use_tqdm=tqdm,
-    #     accelerator=accelerator
-    # )
-
     image_features, text_features, reference_names, target_names, group_members, pair_ids = generate_cirr_triplet_features(
         clip_model=model,
         triplet_dataset=cirr_triplets,
@@ -392,6 +359,15 @@ def evaluate_cirr(
         alpha=0.7
     )
 
+    if return_distributions:
+        dist = compute_cirr_sim_distributions(
+            index_features=index_features,
+            index_names=index_names,
+            predicted_features=predicted_features,
+            reference_names=reference_names,
+            target_names=target_names,
+        )
+
     metrics = compute_cirr_metrics(
         index_features=index_features,
         index_names=index_names,
@@ -406,8 +382,12 @@ def evaluate_cirr(
         k_values_subset = [1,2,3],
     )
 
-    if return_index_tuple:
+    if return_index_tuple and return_distributions:
+        return metrics, dist, (index_features, index_names)
+    elif return_index_tuple:
         return metrics, (index_features, index_names)
+    elif return_distributions:
+        return metrics, dist
     return metrics
 
 
@@ -453,17 +433,6 @@ def generate_cirr_test_submission(
         )
     else:
         index_features, index_names = index_tuple
-
-    # predicted_features, reference_names, target_names, group_members, pair_ids = generate_cirr_predictions(
-    #     clip_model=model,
-    #     triplet_dataset=cirr_triplets,
-    #     fusion_type=fusion_type,
-    #     batch_size=batch_size,
-    #     num_workers=num_workers,
-    #     use_tqdm=tqdm,
-    #     accelerator=accelerator,
-    #     skip_targets=True
-    # )
 
     image_features, text_features, reference_names, target_names, group_members, pair_ids = generate_cirr_triplet_features(
         clip_model=model,

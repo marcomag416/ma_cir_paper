@@ -119,14 +119,16 @@ def plot_sim_distributions(
     pos_similarities: torch.Tensor,
     rnd_similarities: torch.Tensor,
     save_path: str,
+    pos_label: str = 'Positive pairs',
+    rnd_label: str = 'Random pairs',
 ):
     pos_mean = pos_similarities.mean().item()
     rnd_mean = rnd_similarities.mean().item()
 
 
     plt.figure(figsize=(10,6))
-    plt.hist(pos_similarities.detach().cpu().numpy(), bins=50, alpha=0.5, label='Positive pairs')
-    plt.hist(rnd_similarities.detach().cpu().numpy(), bins=50, alpha=0.5, label='Random pairs')
+    plt.hist(pos_similarities.detach().cpu().numpy(), bins=50, alpha=0.5, label=pos_label)
+    plt.hist(rnd_similarities.detach().cpu().numpy(), bins=50, alpha=0.5, label=rnd_label)
     # plt.hist(worst_similarities.detach().cpu().numpy(), bins=50, alpha=0.3, label='Worst similarities')
 
     # plot vertical lines for means

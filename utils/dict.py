@@ -33,3 +33,31 @@ def save_to_csv(data: dict, file_path: str):
         writer.writerow(['Metric', 'Value'])
         for key, value in data.items():
             writer.writerow([key, value])
+
+def save_or_update_csv(data: dict, file_path: str):
+    """Saves a dictionary to a CSV file, or updates it if it already exists.
+
+    Args:
+        data (dict): The data to save or update.
+        file_path (str): The path to the CSV file.
+    """
+    if os.path.exists(file_path):
+        # Read existing data
+        existing_data = {}
+        with open(file_path, mode='r') as csv_file:
+            reader = csv.reader(csv_file)
+            next(reader)  # Skip header
+            for row in reader:
+                existing_data[row[0]] = row[1]
+
+        # Update existing data with new data
+        existing_data.update(data)
+
+        # Write updated data back to CSV
+        with open(file_path, mode='w', newline='') as csv_file:
+            writer = csv.writer(csv_file)
+            writer.writerow(['Metric', 'Value'])
+            for key, value in existing_data.items():
+                writer.writerow([key, value])
+    else:
+        save_to_csv(data, file_path)

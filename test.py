@@ -8,7 +8,7 @@ from evals.metrics import plot_sim_distributions
 from evals.simat_eval import evaluate_simat
 from evals.mscoco_eval import eval_mscoco
 from models import TwoEncoderVLM, AutoModel, AutoConfig
-from utils.dict import prepend_key_to_dict, save_to_csv
+from utils.dict import prepend_key_to_dict, save_or_update_csv
 import torch
 import json
 import os
@@ -70,15 +70,17 @@ def test_model(
         cached_data['circo_index_tuple'] = circo_index_tuple
 
     if "cirr" not in skip_metrics:
-        cirr_metrics = evaluate_cirr(
+        cirr_metrics, cirr_sim_distributions = evaluate_cirr(
             model=model,
             fusion_type=fusion_type,
             batch_size=batch_size,
             num_workers=num_workers,
             tqdm=tqdm,
             accelerator=None,
+            return_distributions=True,
         )
         metrics.update(prepend_key_to_dict("cirr_", cirr_metrics))
+        cached_data['cirr_sim_distributions'] = cirr_sim_distributions
 
     if "macir" not in skip_metrics:
         ma_cir_metrics = evaluate_macir(
@@ -168,12 +170,11 @@ def main(args):
         tqdm=args.tqdm,
         skip_metrics=args.skip_metrics,
     )
-
-    save_to_csv(test_metrics, os.path.join(output_path, "metrics.csv"))
+    if len(test_metrics) > 0:
+        save_or_update_csv(test_metrics, os.path.join(output_path, "metrics.csv"))
 
 
     #generate and save submissions to file
-    
 
     if "cirr" not in args.skip_submission:
         cirr_test_sub = generate_cirr_test_submission(
@@ -218,7 +219,18 @@ def main(args):
             save_path=os.path.join(output_path, "mscoco_sim_distribution.svg"),
         )
 
-
+    if "cirr_sim_distributions" in cached_data:
+        true_trg_sims, rnd_trg_sims = cached_data['cirr_sim_distributions']['true_trgt_sims'], cached_data['cirr_sim_distributions']['rnd_trgt_sims']
+        if args.save_sim_distributions:
+            torch.save(true_trg_sims, os.path.join(output_path, "cirr_true_trgt_sims.pt"))
+            torch.save(rnd_trg_sims, os.path.join(output_path, "cirr_rnd_trgt_sims.pt"))
+        plot_sim_distributions(
+            pos_similarities=true_trg_sims,
+            rnd_similarities=rnd_trg_sims,
+            save_path=os.path.join(output_path, "cirr_sim_distribution.svg"),
+            pos_label="True target",
+            rnd_label="Random target",
+        )
 
 
 if __name__ == "__main__":
