@@ -34,11 +34,13 @@ idna==3.11
 ipykernel==7.1.0
 ipython==9.9.0
 ipython-pygments-lexers==1.1.1
+ipywidgets==8.1.8
 jedi==0.19.2
 jinja2==3.1.6
 joblib==1.5.3
 jupyter-client==8.8.0
 jupyter-core==5.9.1
+jupyterlab-widgets==3.0.16
 kiwisolver==1.4.9
 markupsafe==3.0.3
 matplotlib==3.10.8
@@ -110,5 +112,6 @@ typing-inspection==0.4.2
 urllib3==2.6.3
 wandb==0.24.0
 wcwidth==0.3.3
+widgetsnbextension==4.0.15
 xxhash==3.6.0
 yarl==1.22.0
