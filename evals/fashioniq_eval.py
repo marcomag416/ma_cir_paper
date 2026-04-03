@@ -237,7 +237,7 @@ def fashioniq_test_alpha(
     use_tqdm: bool = False,
 ):
     fashioniq_index = build_fashioniq_dataset(
-        split='val',
+        split='train',
         mode='images',
         image_transform=model.image_processor,
         caption_transform=model.tokenizer,
@@ -245,12 +245,15 @@ def fashioniq_test_alpha(
     )
 
     fashioniq_triplets = build_fashioniq_dataset(
-        split='val',
+        split='train',
         mode='triplets',
         image_transform=model.image_processor,
         caption_transform=model.tokenizer,
         max_length_tokenizer=77
     )
+
+    rnd_generator = np.random.default_rng(42)
+    fashioniq_triplets_sampled = torch.utils.data.Subset(fashioniq_triplets, rnd_generator.choice(len(fashioniq_triplets), size=5056, replace=False))
 
     index_features, index_names, index_classes  = generate_fashioniq_index_features(
         clip_model=model,
@@ -262,7 +265,7 @@ def fashioniq_test_alpha(
 
     image_features, text_features, reference_names, target_names, triplet_classes = generate_fashioniq_triplet_features(
         clip_model=model,
-        triplet_dataset=fashioniq_triplets,
+        triplet_dataset=fashioniq_triplets_sampled,
         batch_size=batch_size,
         num_workers=num_workers,
         use_tqdm=use_tqdm,

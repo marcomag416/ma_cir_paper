@@ -170,7 +170,6 @@ def main(args):
             macir_avg.append(m_dict["avg"]["recall_at1"])
         plot_alpha_sweep(alphas, macir_avg, "MaCIR Avg", os.path.join(output_path, "alpha_sweep_macir_average.png"))
 
-    #todo: create plots of main score vs alpha for each dataset
 
 
 
