@@ -275,6 +275,26 @@
     "lora_rank": 16
     },
     {
+    "name": "unslerp_q2i_sw_clip_b32_mscoco_lora_t10_th",
+    "model_name": "CLIP_B32",
+    "loss": "unslerp_q2i_sw",
+    "dataset": "mscoco",
+    "logit_scale": 10,
+    "learnable_temperature": true,
+    "lr": 1e-6,
+    "scheduler": "none",
+    "batch_size": 64,
+    "num_epochs": 5,
+    "weight_decay": 0.1,
+    "warmup_ratio": 0.0,
+    "use_lora": true,
+    "adapter_type": "all",
+    "encoder_to_freeze": "none",
+    "lora_alpha": 16,
+    "lora_dropout": 0.1,
+    "lora_rank": 16
+    },
+    {
     "name": "unslerp_q2i_clip_b32_mscoco_lora_t10_th_freeproj",
     "model_name": "CLIP_B32",
     "loss": "unslerp_q2i",
@@ -737,7 +757,48 @@
     "fp16": true
     },
 
-
+    {
+    "name": "TAT_clip_b32_mscoco_lora_freeproj",
+    "model_name": "CLIP_B32",
+    "loss": "clip",
+    "dataset": "mscoco",
+    "logit_scale": 0.07,
+    "learnable_temperature": false,
+    "lr": 1e-4,
+    "scheduler": "none",
+    "batch_size": 128,
+    "gradient_accumulation_steps": 8,
+    "num_epochs": 5,
+    "weight_decay": 0.01,
+    "warmup_ratio": 0.0,
+    "use_lora": true,
+    "adapter_type": "no_proj",
+    "encoder_to_freeze": "text",
+    "lora_alpha": 16,
+    "lora_dropout": 0.1,
+    "lora_rank": 16
+    },
+    {
+    "name": "TAT_clip_b32_mscoco_lora",
+    "model_name": "CLIP_B32",
+    "loss": "clip",
+    "dataset": "mscoco",
+    "logit_scale": 0.07,
+    "learnable_temperature": false,
+    "lr": 1e-4,
+    "scheduler": "none",
+    "batch_size": 128,
+    "gradient_accumulation_steps": 8,
+    "num_epochs": 5,
+    "weight_decay": 0.01,
+    "warmup_ratio": 0.0,
+    "use_lora": true,
+    "adapter_type": "all",
+    "encoder_to_freeze": "text",
+    "lora_alpha": 16,
+    "lora_dropout": 0.1,
+    "lora_rank": 16
+    },
 
 
 
